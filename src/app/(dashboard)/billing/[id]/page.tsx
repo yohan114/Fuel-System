@@ -186,7 +186,7 @@ export default async function BillDetailPage(props: PageProps) {
             {bill.breakdownDeductCents > 0 && (
               <Row label="Breakdown deduction" value={`− ${rs(bill.breakdownDeductCents)}`} />
             )}
-            <Row label={`Fuel (${bill.fuelLitres.toLocaleString("en-LK", { maximumFractionDigits: 1 })} L)`} value={bill.rateBasis === "fw" && bill.fuelCostCents > 0 ? rs(bill.fuelCostCents) : `Not billed (${basisLabel(bill.rateBasis as RateBasis)})`} />
+            <Row label={`Fuel — monthly total, all sites (${bill.fuelLitres.toLocaleString("en-LK", { maximumFractionDigits: 1 })} L)`} value={(bill.rateBasis === "fw" || bill.rateBasis === "w") && bill.fuelCostCents > 0 ? rs(bill.fuelCostCents) : `Not billed (${basisLabel(bill.rateBasis as RateBasis)})`} />
           </dl>
         </div>
 

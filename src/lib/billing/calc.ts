@@ -1,7 +1,7 @@
 // Pure billing math — no DB access, fully unit-testable. Replicates the
 // E&C Machine Rental Calculator exactly: billable = max(actual, minimum);
-// fuel is charged only on the Fully Wet (fw) basis; SSCL applies to the
-// subtotal and VAT applies to (subtotal + SSCL). All money is LKR cents.
+// fuel is charged on the driver-supplied bases (Fully Wet / Wet); SSCL applies
+// to the subtotal and VAT applies to (subtotal + SSCL). All money is LKR cents.
 
 export type BillingMode = "hourly" | "perkm" | "perday";
 export type RateBasis = "fw" | "w" | "d";
@@ -21,7 +21,7 @@ export interface LineComputation {
 export interface ComputedTotals {
   billableUnits: number;
   rentalAmountCents: number;
-  fuelChargedCents: number; // fuelCostCents when basis === 'fw', else 0
+  fuelChargedCents: number; // fuelCostCents when basis is 'fw' or 'w', else 0
   subtotalCents: number;
   ssclCents: number;
   vatCents: number;
@@ -32,9 +32,10 @@ export function computeTotals(i: LineComputation): ComputedTotals {
   const billableUnits = Math.max(i.actualUnits, i.minimumUnits);
   const rentalAmountCents = Math.round(billableUnits * i.rateCents);
 
-  // E&C supplies fuel only on the Fully Wet basis; otherwise the customer fuels
-  // their own machine, so fuel is not billed.
-  const fuelChargedCents = i.rateBasis === "fw" ? i.fuelCostCents : 0;
+  // E&C supplies the fuel whenever a driver is provided (Fully Wet or Wet), so
+  // the vehicle's monthly fuel total — issued at any site/pump — is billed on
+  // top of the rental. On the Dry basis the customer self-fuels, so it is not.
+  const fuelChargedCents = i.rateBasis === "fw" || i.rateBasis === "w" ? i.fuelCostCents : 0;
 
   const subtotalCents = rentalAmountCents + fuelChargedCents;
   const ssclCents = Math.round(subtotalCents * i.ssclRate);

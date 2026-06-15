@@ -11,9 +11,9 @@ const GRAY_LIGHT = "#e2e8f0";
 export const COMPANY = {
   name: "Edward and Christie Group",
   division: "Heavy Equipment & Fleet Division",
-  address: "No. 123, Bauddhaloka Mawatha, Colombo 04, Sri Lanka",
-  phone: "+94 11 234 5678",
-  email: "fleet@edwardchristie.lk",
+  address: "64/09 Nawala Road, Nugegoda, Sri Lanka",
+  phone: "0112812990, 0112812991, 0112812441",
+  email: "edchrist@sltnet.lk",
   vatReg: "VAT Reg No: 174042756-7000",
   docNumber: "EC40.WS.IV.8.12.25.3",
 };

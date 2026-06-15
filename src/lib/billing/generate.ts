@@ -3,7 +3,7 @@ import { getBillingConfig, minimumForMode } from "./config";
 import { resolvePeriod, type BillingPeriod } from "./period";
 import { computeRunningDelta, countWorkingDays, sumFuelForMonth } from "./usage";
 import { pickRateCents, defaultModeForAsset } from "./rate";
-import { computeTotals, unitLabel, type BillingMode, type RateBasis } from "./calc";
+import { computeTotals, unitLabel, basisLabel, type BillingMode, type RateBasis } from "./calc";
 
 export type GenerateStatus =
   | "created"
@@ -70,7 +70,9 @@ export async function generateBillForAsset(
   // derive sensible defaults from the asset.
   const billingMode: BillingMode = (existing?.billingMode as BillingMode) ||
     defaultModeForAsset(asset.meterType, asset.rentalRate.equipType);
-  const rateBasis: RateBasis = (existing?.rateBasis as RateBasis) || "fw";
+  // Default to the Wet basis (machine + driver, no fuel baked into the rate);
+  // the vehicle's actual monthly fuel total is billed as a separate line.
+  const rateBasis: RateBasis = (existing?.rateBasis as RateBasis) || "w";
   const minimumUnits = existing ? existing.minimumUnits : minimumForMode(cfg, billingMode);
 
   const pickedRate = pickRateCents(asset.rentalRate, billingMode, rateBasis);
@@ -170,7 +172,7 @@ export async function generateBillForAsset(
     const avgPerL = fuel.litres > 0 ? Math.round(fuel.costCents / fuel.litres) : 0;
     lineItems.push({
       kind: "FUEL",
-      description: "Fuel issued (Fully Wet)",
+      description: `Fuel issued — monthly total, all sites (${basisLabel(rateBasis)})`,
       quantity: fuel.litres,
       unit: "L",
       unitRateCents: avgPerL,
