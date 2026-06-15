@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Document, Page, Text, View, StyleSheet, renderToStream } from "@react-pdf/renderer";
+import { COMPANY } from "@/lib/billing/invoice-document";
 
 const NAVY = "#1e3a5f";
 const AMBER = "#f59e0b";
@@ -10,14 +11,6 @@ const LIGHT = "#f8fafc";
 const WHITE = "#ffffff";
 const GRAY = "#64748b";
 const GRAY_LIGHT = "#e2e8f0";
-
-const COMPANY = {
-  name: "Edward & Christie (Pvt) Ltd",
-  division: "Heavy Equipment & Fleet Division",
-  address: "No. 123, Bauddhaloka Mawatha, Colombo 04, Sri Lanka",
-  phone: "+94 11 234 5678",
-  email: "fleet@edwardchristie.lk",
-};
 
 const styles = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 9, color: "#1e293b", backgroundColor: WHITE },
@@ -66,6 +59,14 @@ const styles = StyleSheet.create({
   footer: { backgroundColor: AMBER, padding: "6 32", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: "auto" },
   footerText: { fontSize: 7.5, color: NAVY, fontFamily: "Helvetica-Bold" },
   footerSub: { fontSize: 7, color: "#78350f" },
+
+  // Site section
+  siteHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: NAVY, borderRadius: 4, padding: "7 12", marginTop: 14, marginBottom: 6 },
+  siteName: { fontSize: 10, fontFamily: "Helvetica-Bold", color: WHITE },
+  siteMeta: { fontSize: 7.5, color: "#93c5fd" },
+  siteSubtotalRow: { flexDirection: "row", justifyContent: "flex-end", gap: 16, backgroundColor: LIGHT, borderRadius: 3, padding: "5 12", marginTop: 4, borderWidth: 1, borderColor: GRAY_LIGHT },
+  siteSubLabel: { fontSize: 7.5, color: GRAY, fontFamily: "Helvetica-Bold", textTransform: "uppercase" },
+  siteSubVal: { fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold" },
 });
 
 function rs(cents: number) {
@@ -79,18 +80,36 @@ const STATUS_COLORS: Record<string, string> = {
   OVERDUE: "#991b1b",
 };
 
+function sumBills(list: any[]) {
+  return list.reduce(
+    (a, b) => {
+      a.rental += b.rentalAmountCents;
+      a.fuel += b.fuelCostCents;
+      a.sscl += b.ssclCents;
+      a.vat += b.vatCents;
+      a.grand += b.grandTotalCents;
+      return a;
+    },
+    { rental: 0, fuel: 0, sscl: 0, vat: 0, grand: 0 }
+  );
+}
+
 function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[]; periodKey: string; generatedAt: string }) {
   const monthLabel = (() => {
     const [y, m] = periodKey.split("-").map(Number);
     return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
   })();
 
-  const totalRental = bills.reduce((s, b) => s + b.rentalAmountCents, 0);
-  const totalFuel = bills.reduce((s, b) => s + b.fuelCostCents, 0);
-  const totalSscl = bills.reduce((s, b) => s + b.ssclCents, 0);
-  const totalVat = bills.reduce((s, b) => s + b.vatCents, 0);
-  const grandTotal = bills.reduce((s, b) => s + b.grandTotalCents, 0);
+  // Group bills by site (project)
+  const groups = new Map<string, { name: string; bills: any[] }>();
+  for (const b of bills) {
+    const key = b.projectId || "__unassigned__";
+    if (!groups.has(key)) groups.set(key, { name: b.projectName || "Unassigned", bills: [] });
+    groups.get(key)!.bills.push(b);
+  }
+  const siteGroups = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
 
+  const total = sumBills(bills);
   const statusCounts = bills.reduce((acc: Record<string, number>, b) => {
     acc[b.status] = (acc[b.status] || 0) + 1;
     return acc;
@@ -98,43 +117,42 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
 
   return (
     <Document>
-      {/* Cover / Summary page */}
-      <Page size="A4" style={styles.page}>
-        <View style={styles.headerBand}>
+      <Page size="A4" style={styles.page} wrap>
+        <View style={styles.headerBand} fixed>
           <View>
             <Text style={styles.companyName}>{COMPANY.name}</Text>
             <Text style={styles.companyDiv}>{COMPANY.division}</Text>
           </View>
           <View>
             <Text style={styles.docTitle}>CONSOLIDATED BILLING</Text>
-            <Text style={styles.docSub}>Period: {monthLabel} · Generated: {generatedAt}</Text>
+            <Text style={styles.docSub}>By Site · {monthLabel} · Generated: {generatedAt}</Text>
           </View>
         </View>
-        <View style={styles.accentStrip} />
+        <View style={styles.accentStrip} fixed />
 
         <View style={styles.body}>
           {/* KPI cards */}
           <View style={styles.summaryRow}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Sites</Text>
+              <Text style={styles.summaryVal}>{siteGroups.length}</Text>
+            </View>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>Total Vehicles</Text>
               <Text style={styles.summaryVal}>{bills.length}</Text>
             </View>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>Total Rental</Text>
-              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(totalRental)}</Text>
-            </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Fuel</Text>
-              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(totalFuel)}</Text>
+              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(total.rental)}</Text>
             </View>
             <View style={[styles.summaryCard, { borderColor: NAVY, borderWidth: 1.5 }]}>
               <Text style={styles.summaryLabel}>Grand Total</Text>
-              <Text style={[styles.summaryVal, { fontSize: 11, color: NAVY }]}>{rs(grandTotal)}</Text>
+              <Text style={[styles.summaryVal, { fontSize: 11, color: NAVY }]}>{rs(total.grand)}</Text>
             </View>
           </View>
 
           {/* Status breakdown */}
-          <View style={{ flexDirection: "row", gap: 6, marginBottom: 14 }}>
+          <View style={{ flexDirection: "row", gap: 6, marginBottom: 4 }}>
             {Object.entries(statusCounts).map(([status, count]) => (
               <View key={status} style={{ backgroundColor: LIGHT, borderRadius: 4, padding: "5 8", borderWidth: 1, borderColor: GRAY_LIGHT }}>
                 <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: STATUS_COLORS[status] || GRAY }}>{status}</Text>
@@ -143,59 +161,77 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
             ))}
           </View>
 
-          {/* Vehicle table */}
-          <Text style={styles.secHeading}>Vehicle Billing Summary</Text>
-          <View style={styles.table}>
-            <View style={styles.tHead}>
-              <Text style={[styles.tHeadCell, styles.cCode]}>E&C No</Text>
-              <Text style={[styles.tHeadCell, styles.cLabel]}>Vehicle</Text>
-              <Text style={[styles.tHeadCell, styles.cSite]}>Site</Text>
-              <Text style={[styles.tHeadCell, styles.cMode]}>Mode/Basis</Text>
-              <Text style={[styles.tHeadCell, styles.cRental]}>Rental</Text>
-              <Text style={[styles.tHeadCell, styles.cFuel]}>Fuel</Text>
-              <Text style={[styles.tHeadCell, styles.cGrand]}>Grand Total</Text>
-            </View>
-            {bills.map((b, i) => (
-              <View key={b.id} style={[styles.tRow, i % 2 === 1 ? styles.tRowAlt : {}]}>
-                <Text style={[styles.tCell, styles.cCode, styles.tCellBold]}>{b.assetCode}</Text>
-                <Text style={[styles.tCell, styles.cLabel]}>{b.assetLabel || "—"}</Text>
-                <Text style={[styles.tCell, styles.cSite]}>{b.projectName || "Unassigned"}</Text>
-                <Text style={[styles.tCell, styles.cMode]}>{b.billingMode.toUpperCase()} · {b.rateBasis.toUpperCase()}</Text>
-                <Text style={[styles.tCell, styles.cRental]}>{rs(b.rentalAmountCents)}</Text>
-                <Text style={[styles.tCell, styles.cFuel]}>{b.fuelCostCents > 0 ? rs(b.fuelCostCents) : "—"}</Text>
-                <Text style={[styles.tCell, styles.cGrand, styles.tCellBold]}>{rs(b.grandTotalCents)}</Text>
+          {/* Per-site sections */}
+          {siteGroups.map((group) => {
+            const st = sumBills(group.bills);
+            return (
+              <View key={group.name} wrap={false}>
+                <View style={styles.siteHeader}>
+                  <Text style={styles.siteName}>{group.name}</Text>
+                  <Text style={styles.siteMeta}>{group.bills.length} vehicle(s) · {rs(st.grand)}</Text>
+                </View>
+                <View style={styles.table}>
+                  <View style={styles.tHead}>
+                    <Text style={[styles.tHeadCell, styles.cCode]}>E&C No</Text>
+                    <Text style={[styles.tHeadCell, styles.cLabel]}>Vehicle</Text>
+                    <Text style={[styles.tHeadCell, styles.cSite]}>Status</Text>
+                    <Text style={[styles.tHeadCell, styles.cMode]}>Mode/Basis</Text>
+                    <Text style={[styles.tHeadCell, styles.cRental]}>Rental</Text>
+                    <Text style={[styles.tHeadCell, styles.cFuel]}>Fuel</Text>
+                    <Text style={[styles.tHeadCell, styles.cGrand]}>Grand Total</Text>
+                  </View>
+                  {group.bills.map((b, i) => (
+                    <View key={b.id} style={[styles.tRow, i % 2 === 1 ? styles.tRowAlt : {}]}>
+                      <Text style={[styles.tCell, styles.cCode, styles.tCellBold]}>{b.assetCode}</Text>
+                      <Text style={[styles.tCell, styles.cLabel]}>{b.assetLabel || "—"}</Text>
+                      <Text style={[styles.tCell, styles.cSite, { color: STATUS_COLORS[b.status] || GRAY }]}>{b.status}</Text>
+                      <Text style={[styles.tCell, styles.cMode]}>{b.billingMode.toUpperCase()} · {b.rateBasis.toUpperCase()}</Text>
+                      <Text style={[styles.tCell, styles.cRental]}>{rs(b.rentalAmountCents)}</Text>
+                      <Text style={[styles.tCell, styles.cFuel]}>{b.fuelCostCents > 0 ? rs(b.fuelCostCents) : "—"}</Text>
+                      <Text style={[styles.tCell, styles.cGrand, styles.tCellBold]}>{rs(b.grandTotalCents)}</Text>
+                    </View>
+                  ))}
+                </View>
+                {/* Per-site subtotal */}
+                <View style={styles.siteSubtotalRow}>
+                  <Text style={styles.siteSubLabel}>Rental <Text style={styles.siteSubVal}>{rs(st.rental)}</Text></Text>
+                  <Text style={styles.siteSubLabel}>Fuel <Text style={styles.siteSubVal}>{rs(st.fuel)}</Text></Text>
+                  <Text style={styles.siteSubLabel}>SSCL <Text style={styles.siteSubVal}>{rs(st.sscl)}</Text></Text>
+                  <Text style={styles.siteSubLabel}>VAT <Text style={styles.siteSubVal}>{rs(st.vat)}</Text></Text>
+                  <Text style={styles.siteSubLabel}>Site Total <Text style={[styles.siteSubVal, { color: AMBER }]}>{rs(st.grand)}</Text></Text>
+                </View>
               </View>
-            ))}
-          </View>
+            );
+          })}
 
-          {/* Totals */}
+          {/* Grand totals across all sites */}
           <View style={styles.totalsBox}>
             <View style={styles.totRow}>
               <Text style={styles.totLabel}>Total Rental</Text>
-              <Text style={styles.totVal}>{rs(totalRental)}</Text>
+              <Text style={styles.totVal}>{rs(total.rental)}</Text>
             </View>
             <View style={styles.totRow}>
               <Text style={styles.totLabel}>Total Fuel</Text>
-              <Text style={styles.totVal}>{rs(totalFuel)}</Text>
+              <Text style={styles.totVal}>{rs(total.fuel)}</Text>
             </View>
             <View style={styles.totRow}>
               <Text style={styles.totLabel}>Total SSCL</Text>
-              <Text style={styles.totVal}>{rs(totalSscl)}</Text>
+              <Text style={styles.totVal}>{rs(total.sscl)}</Text>
             </View>
             <View style={styles.totRow}>
               <Text style={styles.totLabel}>Total VAT</Text>
-              <Text style={styles.totVal}>{rs(totalVat)}</Text>
+              <Text style={styles.totVal}>{rs(total.vat)}</Text>
             </View>
             <View style={styles.grandRow}>
               <Text style={styles.grandLabel}>Grand Total</Text>
-              <Text style={styles.grandVal}>{rs(grandTotal)}</Text>
+              <Text style={styles.grandVal}>{rs(total.grand)}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Edward & Christie (Pvt) Ltd — Consolidated Statement · {monthLabel}</Text>
-          <Text style={styles.footerSub}>{COMPANY.email}</Text>
+        <View style={styles.footer} fixed>
+          <Text style={styles.footerText}>{COMPANY.name} — Consolidated Statement (by Site) · {monthLabel}</Text>
+          <Text style={styles.footerSub} render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`} />
         </View>
       </Page>
     </Document>
@@ -217,17 +253,22 @@ export async function GET(request: NextRequest) {
   }
 
   const periodKey = `${year}-${String(month).padStart(2, "0")}`;
+  const siteCode = searchParams.get("site")?.trim() || null; // optional: filter to one site (project code)
+
+  const where: any = { year, month };
+  if (siteCode) where.projectCode = siteCode;
 
   const bills = await prisma.bill.findMany({
-    where: { year, month },
+    where,
     orderBy: [{ projectName: "asc" }, { assetCode: "asc" }],
   });
 
   if (bills.length === 0) {
-    return new NextResponse(`No bills found for ${periodKey}`, { status: 404 });
+    return new NextResponse(`No bills found for ${periodKey}${siteCode ? ` at site ${siteCode}` : ""}`, { status: 404 });
   }
 
   const generatedAt = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const fileSuffix = siteCode ? `${siteCode}_${periodKey}` : periodKey;
 
   try {
     const stream = await renderToStream(
@@ -235,7 +276,7 @@ export async function GET(request: NextRequest) {
     );
     const response = new NextResponse(stream as any);
     response.headers.set("Content-Type", "application/pdf");
-    response.headers.set("Content-Disposition", `attachment; filename="consolidated_billing_${periodKey}.pdf"`);
+    response.headers.set("Content-Disposition", `attachment; filename="consolidated_billing_${fileSuffix}.pdf"`);
     return response;
   } catch (err: any) {
     console.error("Consolidated PDF error:", err);

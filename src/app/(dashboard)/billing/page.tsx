@@ -143,7 +143,13 @@ export default async function BillingPage(props: PageProps) {
 
       {/* Admin generate panels */}
       {isAdmin && <GenerateBillsPanel defaultYear={y || cur.year} defaultMonth={m || cur.month} />}
-      {isAdmin && <ConsolidatedBillPanel defaultYear={y || cur.year} defaultMonth={m || cur.month} />}
+      {isAdmin && (
+        <ConsolidatedBillPanel
+          defaultYear={y || cur.year}
+          defaultMonth={m || cur.month}
+          sites={projects.map((p) => ({ code: p.code, name: p.name }))}
+        />
+      )}
 
       {/* Bills table */}
       {bills.length === 0 ? (

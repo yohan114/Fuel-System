@@ -6,14 +6,17 @@ import { FileText, FileSpreadsheet } from "lucide-react";
 interface Props {
   defaultYear: number;
   defaultMonth: number;
+  sites?: { code: string; name: string }[];
 }
 
-export default function ConsolidatedBillPanel({ defaultYear, defaultMonth }: Props) {
+export default function ConsolidatedBillPanel({ defaultYear, defaultMonth, sites = [] }: Props) {
   const [year, setYear] = useState(defaultYear);
   const [month, setMonth] = useState(defaultMonth);
+  const [site, setSite] = useState("all");
 
-  const pdfHref = `/api/billing/consolidated/pdf?year=${year}&month=${month}`;
-  const xlsxHref = `/api/billing/consolidated/xlsx?year=${year}&month=${month}`;
+  const siteParam = site !== "all" ? `&site=${encodeURIComponent(site)}` : "";
+  const pdfHref = `/api/billing/consolidated/pdf?year=${year}&month=${month}${siteParam}`;
+  const xlsxHref = `/api/billing/consolidated/xlsx?year=${year}&month=${month}${siteParam}`;
 
   return (
     <div className="bg-white/5 border border-white/5 p-5 rounded-2xl space-y-4">
@@ -22,9 +25,9 @@ export default function ConsolidatedBillPanel({ defaultYear, defaultMonth }: Pro
         Consolidated Vehicle Bill
       </h3>
       <p className="text-[11px] text-gray-400">
-        Generate one combined PDF covering <span className="text-white">all vehicles</span> for the selected month — includes a cover summary, per-vehicle breakdown, and grand totals.
+        Generate one combined statement <span className="text-white">grouped by site</span> for the selected month — each site gets its own section with per-vehicle breakdown and a site subtotal, followed by an overall grand total. Choose a single site to bill that site only.
       </p>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
         <div>
           <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Year</label>
           <input
@@ -44,6 +47,21 @@ export default function ConsolidatedBillPanel({ defaultYear, defaultMonth }: Pro
             {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
               <option key={m} value={m}>
                 {new Date(2000, m - 1, 1).toLocaleString("en-US", { month: "long" })}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Site</label>
+          <select
+            value={site}
+            onChange={(e) => setSite(e.target.value)}
+            className="w-full bg-[#1b1e30] border border-white/5 rounded-xl px-3 py-2.5 text-white text-xs focus:outline-none focus:border-amber-500/50"
+          >
+            <option value="all">All sites</option>
+            {sites.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -70,7 +88,7 @@ export default function ConsolidatedBillPanel({ defaultYear, defaultMonth }: Pro
         </div>
       </div>
       <p className="text-[10px] text-gray-500">
-        Bills for all vehicles with the matching year / month are included regardless of status.
+        Bills for the matching year / month are included regardless of status, grouped by site.
       </p>
     </div>
   );
