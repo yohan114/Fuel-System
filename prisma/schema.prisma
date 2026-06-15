@@ -367,6 +367,13 @@ model Bill {
   derivedFromFuel Boolean @default(false)
   fuelConsMidRate Float?  // mid consumption rate used (L/hr or L/km)
 
+  // Fuel-derived options and raw meter units
+  actualMeterUnits     Float?
+  derivedStandardUnits Float?
+  derivedEconUnits     Float?
+  fuelConsEconSnapshot Float?
+  fuelConsTypSnapshot  Float?
+
   // Breakdown deduction
   breakdownDays        Int @default(0)
   breakdownDeductCents Int @default(0)

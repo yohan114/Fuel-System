@@ -54,50 +54,87 @@ export default async function BillDetailPage(props: PageProps) {
     notFound();
   }
 
-  // Chart data: fetch all readings within the period window.
-  // If none exist in the window, synthesise two points from the bill snapshot
-  // so the chart always has data when meter readings exist outside the month.
-  let readingsData: { date: string; value: number }[] = [];
-  if (bill.billingMode === "hourly" || bill.billingMode === "perkm") {
-    const meterType = bill.billingMode === "perkm" ? "KM" : "HOURS";
-    const readings = await prisma.meterReading.findMany({
-      where: { assetId: bill.assetId, readingType: meterType, readingDate: { gte: bill.periodStart, lte: bill.periodEnd } },
-      orderBy: { readingDate: "asc" },
-    });
-    readingsData = readings.map((r) => ({
-      date: new Date(r.readingDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
-      value: r.value,
-    }));
-    if (readingsData.length === 0 && bill.openingMeter != null && bill.closingMeter != null) {
-      readingsData = [
-        { date: new Date(bill.periodStart).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), value: bill.openingMeter },
-        { date: new Date(bill.periodEnd).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), value: bill.closingMeter },
-      ];
-    }
-  }
+  // Load meter readings and fuel issues
+  const meterType = bill.billingMode === "perkm" ? "KM" : "HOURS";
+  const readings = (bill.billingMode === "hourly" || bill.billingMode === "perkm")
+    ? await prisma.meterReading.findMany({
+        where: { assetId: bill.assetId, readingType: meterType, readingDate: { gte: bill.periodStart, lte: bill.periodEnd } },
+        orderBy: { readingDate: "asc" },
+      })
+    : [];
+
   const fuelIssues = await prisma.fuelIssue.findMany({
     where: { assetId: bill.assetId, issueDate: { gte: bill.periodStart, lte: bill.periodEnd } },
     orderBy: { issueDate: "asc" },
   });
+
   const fuelData = fuelIssues.map((f) => ({
     date: new Date(f.issueDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
     litres: f.litres,
   }));
 
-  // Fuel-derived fallback: when there are no meter readings but units were
-  // derived from fuel, synthesise a cumulative "running" curve from the fuel
-  // fills (each fill adds litres ÷ mid consumption rate to the running total).
-  let derivedRunning = false;
-  if (readingsData.length === 0 && bill.derivedFromFuel && bill.fuelConsMidRate && bill.fuelConsMidRate > 0) {
-    let cumulative = 0;
-    readingsData = fuelIssues.map((f) => {
-      cumulative += f.litres / bill.fuelConsMidRate!;
-      return {
-        date: new Date(f.issueDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
-        value: Math.round(cumulative * 10) / 10,
-      };
-    });
-    derivedRunning = readingsData.length > 0;
+  // Retrieve consumption rates (prefer snapshots stored on the bill, fallback to rate card)
+  const fuelConsEcon = bill.fuelConsEconSnapshot ?? assetWithRate?.rentalRate?.fuelConsEcon ?? null;
+  const fuelConsTyp = bill.fuelConsTypSnapshot ?? assetWithRate?.rentalRate?.fuelConsTyp ?? null;
+
+  // Build running curves
+  let runningFuelLitres = 0;
+  const fuelIssuesWithRunning = fuelIssues.map((f) => {
+    runningFuelLitres += f.litres;
+    return {
+      date: f.issueDate,
+      dateStr: new Date(f.issueDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+      runningStandard: fuelConsTyp && fuelConsTyp > 0 ? (runningFuelLitres / fuelConsTyp) : 0,
+      runningEcon: fuelConsEcon && fuelConsEcon > 0 ? (runningFuelLitres / fuelConsEcon) : 0,
+    };
+  });
+
+  const anchor = bill.openingMeter ?? 0;
+  const fuelChartPoints = fuelIssuesWithRunning.map((f) => ({
+    date: f.date,
+    dateStr: f.dateStr,
+    standard: Math.round((anchor + f.runningStandard) * 10) / 10,
+    econ: Math.round((anchor + f.runningEcon) * 10) / 10,
+  }));
+
+  const meterChartPoints = readings.map((r) => ({
+    date: r.readingDate,
+    dateStr: new Date(r.readingDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+    actual: r.value,
+  }));
+
+  // Merge chronologically
+  const mergedMap = new Map<string, { date: Date; dateStr: string; actual?: number; standard?: number; econ?: number }>();
+  
+  for (const p of meterChartPoints) {
+    const key = p.date.toISOString().split("T")[0];
+    const existingObj = mergedMap.get(key) || { date: p.date, dateStr: p.dateStr };
+    existingObj.actual = p.actual;
+    mergedMap.set(key, existingObj);
+  }
+  
+  for (const p of fuelChartPoints) {
+    const key = p.date.toISOString().split("T")[0];
+    const existingObj = mergedMap.get(key) || { date: p.date, dateStr: p.dateStr };
+    existingObj.standard = p.standard;
+    existingObj.econ = p.econ;
+    mergedMap.set(key, existingObj);
+  }
+
+  let readingsData = Array.from(mergedMap.values())
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((item) => ({
+      date: item.dateStr,
+      actual: item.actual ?? null,
+      standard: item.standard ?? null,
+      econ: item.econ ?? null,
+    }));
+
+  if (readingsData.length === 0 && bill.openingMeter != null && bill.closingMeter != null) {
+    readingsData = [
+      { date: new Date(bill.periodStart).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), actual: bill.openingMeter, standard: null, econ: null },
+      { date: new Date(bill.periodEnd).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), actual: bill.closingMeter, standard: null, econ: null },
+    ];
   }
 
   // Breakdown history for the billing period
@@ -173,7 +210,7 @@ export default async function BillDetailPage(props: PageProps) {
       </div>
 
       {/* Running + fuel charts */}
-      <BillingRunningChart mode={bill.billingMode} unit={unit} readingsData={readingsData} fuelData={fuelData} derived={derivedRunning} />
+      <BillingRunningChart mode={bill.billingMode} unit={unit} readingsData={readingsData} fuelData={fuelData} derived={bill.derivedFromFuel} />
 
       {/* Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -181,10 +218,40 @@ export default async function BillDetailPage(props: PageProps) {
         <div className="bg-[#121420] border border-white/5 rounded-2xl p-6">
           <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4">Rental & Usage</h3>
           <dl className="space-y-2.5 text-xs">
-            <Row
-              label={`Actual ${unit}${bill.derivedFromFuel ? " (fuel-derived)" : ""}`}
-              value={bill.actualUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })}
-            />
+            {/* Standard comparison lines if hourly or perkm mode */}
+            {(bill.billingMode === "hourly" || bill.billingMode === "perkm") ? (
+              <>
+                <Row
+                  label={`Actual ${unit} (meter-derived)`}
+                  value={bill.actualMeterUnits != null 
+                    ? bill.actualMeterUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })
+                    : (bill.derivedFromFuel ? "0.00" : bill.actualUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 }))
+                  }
+                  active={!bill.derivedFromFuel}
+                />
+                <Row
+                  label={`Actual standard ${unit} (fuel-derived)`}
+                  value={bill.derivedStandardUnits != null 
+                    ? bill.derivedStandardUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })
+                    : "—"
+                  }
+                  active={bill.derivedFromFuel && bill.derivedStandardUnits != null && Math.abs(bill.actualUnits - bill.derivedStandardUnits) < 0.1}
+                />
+                <Row
+                  label={`Actual economy ${unit} (fuel-derived)`}
+                  value={bill.derivedEconUnits != null 
+                    ? bill.derivedEconUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })
+                    : "—"
+                  }
+                  active={bill.derivedFromFuel && bill.derivedEconUnits != null && Math.abs(bill.actualUnits - bill.derivedEconUnits) < 0.1}
+                />
+              </>
+            ) : (
+              <Row
+                label={`Actual ${unit}`}
+                value={bill.actualUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })}
+              />
+            )}
             <Row label={`Minimum guaranteed ${unit}`} value={bill.minimumUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })} />
             <Row label={`Billable ${unit}`} value={bill.billableUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })} strong />
             {bill.openingMeter != null && (
@@ -250,7 +317,7 @@ export default async function BillDetailPage(props: PageProps) {
         <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4 text-xs text-amber-300 flex items-start gap-3">
           <span className="text-amber-400 font-bold uppercase tracking-wider text-[10px] shrink-0 mt-0.5">Notice</span>
           <p>
-            Actual {unit} derived from fuel consumption rate ({bill.fuelConsMidRate != null ? bill.fuelConsMidRate.toFixed(2) : "—"} L/{unit === "km" ? "km" : "hr"} mid-value) — no meter readings found for this period.
+            Actual {unit} derived from fuel consumption rate ({bill.fuelConsMidRate != null ? bill.fuelConsMidRate.toFixed(2) : "—"} L/{unit === "km" ? "km" : "hr"}) — fuel-derived units were higher than recorded actual units and were billed to maximize revenue.
           </p>
         </div>
       )}
@@ -302,11 +369,11 @@ export default async function BillDetailPage(props: PageProps) {
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Row({ label, value, strong, active }: { label: string; value: string; strong?: boolean; active?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <dt className="text-gray-400">{label}</dt>
-      <dd className={strong ? "text-white font-bold" : "text-gray-300"}>{value}</dd>
+      <dt className={active ? "text-indigo-400 font-bold" : "text-gray-400"}>{label}</dt>
+      <dd className={strong ? "text-white font-bold" : active ? "text-indigo-400 font-bold" : "text-gray-300"}>{value}</dd>
     </div>
   );
 }

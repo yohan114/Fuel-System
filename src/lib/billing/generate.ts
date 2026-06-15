@@ -102,20 +102,43 @@ export async function generateBillForAsset(
 
   const fuel = await sumFuelForMonth(asset.id, period.start, period.end);
 
-  // Fuel-based unit derivation: when no meter readings exist but fuel was issued
-  // and a fuel consumption rate is available, derive units from litres / midCons.
+  const actualMeterUnits = actualUnits;
+  let derivedStandardUnits: number | null = null;
+  let derivedEconUnits: number | null = null;
+
   if (
-    actualUnits === 0 &&
     fuel.litres > 0 &&
     (billingMode === "hourly" || billingMode === "perkm") &&
     asset.rentalRate.fuelConsEcon != null &&
     asset.rentalRate.fuelConsTyp != null
   ) {
-    const midCons = (asset.rentalRate.fuelConsEcon + asset.rentalRate.fuelConsTyp) / 2;
-    if (midCons > 0) {
-      actualUnits = fuel.litres / midCons;
-      fuelConsMidRate = midCons;
+    const fuelConsEcon = asset.rentalRate.fuelConsEcon;
+    const fuelConsTyp = asset.rentalRate.fuelConsTyp;
+
+    if (fuelConsTyp > 0) {
+      derivedStandardUnits = fuel.litres / fuelConsTyp;
+    }
+    if (fuelConsEcon > 0) {
+      derivedEconUnits = fuel.litres / fuelConsEcon;
+    }
+
+    const compareValues = [
+      actualMeterUnits,
+      derivedStandardUnits ?? 0,
+      derivedEconUnits ?? 0,
+    ];
+    const highestVal = Math.max(...compareValues);
+
+    if (highestVal > actualMeterUnits) {
+      actualUnits = highestVal;
       derivedFromFuel = true;
+
+      // Determine which rate yielded the highest value
+      if (highestVal === derivedEconUnits) {
+        fuelConsMidRate = fuelConsEcon;
+      } else {
+        fuelConsMidRate = fuelConsTyp;
+      }
     }
   }
 
@@ -225,6 +248,11 @@ export async function generateBillForAsset(
     fuelConsMidRate,
     breakdownDays,
     breakdownDeductCents,
+    actualMeterUnits,
+    derivedStandardUnits,
+    derivedEconUnits,
+    fuelConsEconSnapshot: asset.rentalRate.fuelConsEcon,
+    fuelConsTypSnapshot: asset.rentalRate.fuelConsTyp,
   };
 
   const billId = await prisma.$transaction(async (tx) => {

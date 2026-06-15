@@ -33,9 +33,9 @@ const adapter = new PrismaBetterSqlite3({
 const prisma = new PrismaClient({ adapter });
 
 const files = [
-  { path: "d:/Yohan/Fuel System/BADALGAMA PLANT -March -2026.xlsx", sheet: "March-2026", month: 3 },
-  { path: "d:/Yohan/Fuel System/Badalgama Plant-April-2026.xlsx", sheet: "APRIL-2026", month: 4 },
-  { path: "d:/Yohan/Fuel System/Badalgama Plant-May-2026.xlsx", sheet: "MAY-2026", month: 5 }
+  { path: path.join(process.cwd(), "BADALGAMA PLANT -March -2026.xlsx"), sheet: "March-2026", month: 3 },
+  { path: path.join(process.cwd(), "Badalgama Plant-April-2026.xlsx"), sheet: "APRIL-2026", month: 4 },
+  { path: path.join(process.cwd(), "Badalgama Plant-May-2026.xlsx"), sheet: "MAY-2026", month: 5 }
 ];
 
 // Project sites and other non-vehicle lines to skip

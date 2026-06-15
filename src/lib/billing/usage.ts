@@ -21,6 +21,35 @@ export async function computeRunningDelta(
   start: Date,
   end: Date
 ): Promise<RunningDelta> {
+  const asset = await prisma.asset.findUnique({
+    where: { id: assetId },
+    include: { project: true }
+  });
+  const isGampaha = asset?.project?.code === "GB";
+
+  if (isGampaha) {
+    const manualReadings = await prisma.meterReading.findMany({
+      where: {
+        assetId,
+        readingType: meterType,
+        source: "MANUAL",
+        readingDate: { gte: start, lte: end },
+      },
+    });
+
+    if (manualReadings.length > 0) {
+      const sum = manualReadings.reduce((acc, r) => acc + r.value, 0);
+      const values = manualReadings.map(r => r.value);
+      const minVal = Math.min(...values);
+      const maxVal = Math.max(...values);
+      return {
+        opening: minVal,
+        closing: maxVal,
+        delta: sum,
+      };
+    }
+  }
+
   const opening =
     (await prisma.meterReading.findFirst({
       where: { assetId, readingType: meterType, readingDate: { lte: start } },

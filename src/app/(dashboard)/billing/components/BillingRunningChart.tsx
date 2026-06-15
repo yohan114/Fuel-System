@@ -14,7 +14,9 @@ import {
 
 interface RunningPoint {
   date: string;
-  value: number;
+  actual?: number | null;
+  standard?: number | null;
+  econ?: number | null;
 }
 interface FuelPoint {
   date: string;
@@ -70,16 +72,37 @@ export default function BillingRunningChart({ mode, unit, readingsData, fuelData
                 <Tooltip
                   contentStyle={{ backgroundColor: "#1b1e30", borderColor: "rgba(255,255,255,0.05)", borderRadius: "12px" }}
                   labelStyle={{ color: "#9ca3af", fontSize: "11px" }}
-                  formatter={(value: any) => [`${Number(value).toLocaleString()} ${unit}`, "Reading"]}
+                  formatter={(value: any, name: any) => [`${Number(value).toLocaleString()} ${unit}`, String(name)]}
                 />
                 <Line
                   type="monotone"
-                  dataKey="value"
-                  stroke={derived ? "#f59e0b" : "#10b981"}
+                  dataKey="actual"
+                  name="Actual (Meter)"
+                  stroke="#10b981"
+                  strokeWidth={2.5}
+                  dot={{ r: 2.5, fill: "#10b981" }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="standard"
+                  name="Standard Fuel-Derived"
+                  stroke="#f59e0b"
                   strokeWidth={2}
-                  strokeDasharray={derived ? "5 4" : undefined}
-                  dot={{ r: 2, fill: derived ? "#f59e0b" : "#10b981" }}
-                  activeDot={{ r: 4 }}
+                  strokeDasharray="5 4"
+                  dot={{ r: 2, fill: "#f59e0b" }}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="econ"
+                  name="Economy Fuel-Derived"
+                  stroke="#8b5cf6"
+                  strokeWidth={2}
+                  strokeDasharray="3 3"
+                  dot={{ r: 2, fill: "#8b5cf6" }}
+                  connectNulls
                 />
               </LineChart>
             </ResponsiveContainer>

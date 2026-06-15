@@ -235,6 +235,14 @@ export function InvoiceDocument({ bill }: { bill: any }) {
             </View>
           </View>
 
+          {bill.derivedFromFuel && (
+            <View style={{ marginTop: 12, padding: "6 10", backgroundColor: "#fef3c7", borderRadius: 4 }}>
+              <Text style={{ fontSize: 7, color: "#b45309", fontFamily: "Helvetica-Bold" }}>
+                NOTICE: Actual {bill.billingMode === "hourly" ? "hours" : "km"} derived from fuel consumption (Standard: {bill.derivedStandardUnits?.toFixed(1) ?? "—"}, Economy: {bill.derivedEconUnits?.toFixed(1) ?? "—"}, Meter: {bill.actualMeterUnits?.toFixed(1) ?? "—"}). Highest value was billed.
+              </Text>
+            </View>
+          )}
+
           {isDraft && (
             <View style={{ marginTop: 12, padding: "6 10", backgroundColor: "#fef3c7", borderRadius: 4 }}>
               <Text style={{ fontSize: 7.5, color: "#92400e", fontFamily: "Helvetica-Bold" }}>

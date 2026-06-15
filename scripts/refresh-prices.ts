@@ -1,5 +1,16 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import fs from "fs";
+import path from "path";
+
+// Load .env manually to ensure environment variables are present in script context
+const envPath = path.join(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    const m = line.match(/^\s*([\w.-]+)\s*=\s*"?([^"]*)"?\s*$/);
+    if (m) process.env[m[1]] = m[2];
+  }
+}
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL || "file:./data/app.db",
@@ -7,7 +18,7 @@ const adapter = new PrismaBetterSqlite3({
 const prisma = new PrismaClient({ adapter });
 
 async function refreshPrices() {
-  console.log("Starting Ceypetco fuel price refresh...");
+  console.log("Starting Ceypetco historical fuel price refresh...");
 
   // Load admin user to associate with price entries
   const adminUser = await prisma.user.findFirst({
@@ -18,7 +29,7 @@ async function refreshPrices() {
     process.exit(1);
   }
 
-  const url = "https://ceypetco.gov.lk/";
+  const url = "https://ceypetco.gov.lk/historical-prices/";
   
   // Best-effort headers to avoid Cloudflare/WAF blocks
   const headers = {
@@ -36,95 +47,126 @@ async function refreshPrices() {
     }
 
     const html = await response.text();
-    console.log("Ceypetco page loaded successfully. Parsing prices...");
+    console.log("Ceypetco historical prices page loaded successfully. Parsing prices...");
 
-    // Best-effort extraction using regex pattern matches
-    // Lanka Auto Diesel typically around Rs. 300 - 500
-    // Lanka Super Diesel typically around Rs. 400 - 600
-    const autoDieselMatch = html.match(/Lanka\s*Auto\s*Diesel[^]*?Rs\.?\s*(\d{3})/i);
-    const superDieselMatch = html.match(/Lanka\s*Super\s*Diesel[^]*?Rs\.?\s*(\d{3})/i);
-
-    let scrapedAutoPrice: number | null = null;
-    let scrapedSuperPrice: number | null = null;
-
-    if (autoDieselMatch) {
-      scrapedAutoPrice = parseInt(autoDieselMatch[1], 10) * 100; // to cents
-      console.log(`Parsed Lanka Auto Diesel: Rs. ${autoDieselMatch[1]}`);
-    }
-    if (superDieselMatch) {
-      scrapedSuperPrice = parseInt(superDieselMatch[1], 10) * 100; // to cents
-      console.log(`Parsed Lanka Super Diesel: Rs. ${superDieselMatch[1]}`);
-    }
-
-    if (!scrapedAutoPrice || !scrapedSuperPrice) {
-      // Try fallback regexes
-      const fallbackAuto = html.match(/Auto\s*Diesel[^]*?(?:Rs\.?|LKR)\s*(\d{3})/i);
-      const fallbackSuper = html.match(/Super\s*Diesel[^]*?(?:Rs\.?|LKR)\s*(\d{3})/i);
-      if (fallbackAuto && !scrapedAutoPrice) scrapedAutoPrice = parseInt(fallbackAuto[1], 10) * 100;
-      if (fallbackSuper && !scrapedSuperPrice) scrapedSuperPrice = parseInt(fallbackSuper[1], 10) * 100;
-    }
-
-    if (!scrapedAutoPrice || !scrapedSuperPrice) {
-      throw new Error("Could not parse fuel prices from Ceypetco HTML structure.");
+    const parsedRevisions: { date: Date; dateStr: string; lad: number; lsd: number }[] = [];
+    const rowRegex = /<tr>\s*<td>(.*?)<\/td>\s*<td>(.*?)<\/td>\s*<td>(.*?)<\/td>\s*<td>(.*?)<\/td>\s*<td>(.*?)<\/td>/g;
+    let match;
+    while ((match = rowRegex.exec(html)) !== null) {
+      const dateStr = match[1].trim();
+      const dateParts = dateStr.split(" ")[0].split(".");
+      if (dateParts.length === 3) {
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1; // 0-based
+        const year = parseInt(dateParts[2], 10);
+        
+        // Only process prices from January 2026 onwards
+        if (year > 2026 || (year === 2026 && month >= 0)) {
+          const lad = parseInt(match[4].trim(), 10) * 100; // to LKR cents
+          const lsd = parseInt(match[5].trim(), 10) * 100; // to LKR cents
+          
+          if (!isNaN(day) && !isNaN(month) && !isNaN(year) && !isNaN(lad) && !isNaN(lsd)) {
+            // Colombo midnight (UTC+5:30)
+            const date = new Date(`${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+05:30`);
+            parsedRevisions.push({ date, dateStr, lad, lsd });
+          }
+        }
+      }
     }
 
-    // Write only-if-changed logic
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // truncate time
+    if (parsedRevisions.length === 0) {
+      throw new Error("No price revisions found in the Ceypetco table since January 2026.");
+    }
+
+    console.log(`Parsed ${parsedRevisions.length} historical price revisions from January 2026 onwards.`);
 
     let changesRecorded = 0;
 
-    // Check Auto Diesel
-    const latestAuto = await prisma.fuelPrice.findFirst({
-      where: { fuelKind: "AUTO_DIESEL" },
-      orderBy: { effectiveFrom: "desc" },
-    });
-
-    if (!latestAuto || latestAuto.pricePerLitre !== scrapedAutoPrice) {
-      await prisma.fuelPrice.upsert({
+    for (const rev of parsedRevisions) {
+      // Upsert Auto Diesel (LAD)
+      const existingAuto = await prisma.fuelPrice.findUnique({
         where: {
           fuelKind_effectiveFrom: {
             fuelKind: "AUTO_DIESEL",
-            effectiveFrom: today,
+            effectiveFrom: rev.date,
           },
         },
-        update: { pricePerLitre: scrapedAutoPrice, source: "CEYPETCO", enteredById: adminUser.id },
-        create: { fuelKind: "AUTO_DIESEL", pricePerLitre: scrapedAutoPrice, effectiveFrom: today, source: "CEYPETCO", enteredById: adminUser.id, note: "Auto-scraped from Ceypetco website" },
       });
-      changesRecorded++;
-    }
 
-    // Check Super Diesel
-    const latestSuper = await prisma.fuelPrice.findFirst({
-      where: { fuelKind: "SUPER_DIESEL" },
-      orderBy: { effectiveFrom: "desc" },
-    });
+      if (!existingAuto || existingAuto.pricePerLitre !== rev.lad) {
+        await prisma.fuelPrice.upsert({
+          where: {
+            fuelKind_effectiveFrom: {
+              fuelKind: "AUTO_DIESEL",
+              effectiveFrom: rev.date,
+            },
+          },
+          update: {
+            pricePerLitre: rev.lad,
+            source: "CEYPETCO",
+            enteredById: adminUser.id,
+            note: `Auto-scraped from Ceypetco historical prices table (${rev.dateStr})`,
+          },
+          create: {
+            fuelKind: "AUTO_DIESEL",
+            pricePerLitre: rev.lad,
+            effectiveFrom: rev.date,
+            source: "CEYPETCO",
+            enteredById: adminUser.id,
+            note: `Auto-scraped from Ceypetco historical prices table (${rev.dateStr})`,
+          },
+        });
+        changesRecorded++;
+      }
 
-    if (!latestSuper || latestSuper.pricePerLitre !== scrapedSuperPrice) {
-      await prisma.fuelPrice.upsert({
+      // Upsert Super Diesel (LSD)
+      const existingSuper = await prisma.fuelPrice.findUnique({
         where: {
           fuelKind_effectiveFrom: {
             fuelKind: "SUPER_DIESEL",
-            effectiveFrom: today,
+            effectiveFrom: rev.date,
           },
         },
-        update: { pricePerLitre: scrapedSuperPrice, source: "CEYPETCO", enteredById: adminUser.id },
-        create: { fuelKind: "SUPER_DIESEL", pricePerLitre: scrapedSuperPrice, effectiveFrom: today, source: "CEYPETCO", enteredById: adminUser.id, note: "Auto-scraped from Ceypetco website" },
       });
-      changesRecorded++;
+
+      if (!existingSuper || existingSuper.pricePerLitre !== rev.lsd) {
+        await prisma.fuelPrice.upsert({
+          where: {
+            fuelKind_effectiveFrom: {
+              fuelKind: "SUPER_DIESEL",
+              effectiveFrom: rev.date,
+            },
+          },
+          update: {
+            pricePerLitre: rev.lsd,
+            source: "CEYPETCO",
+            enteredById: adminUser.id,
+            note: `Auto-scraped from Ceypetco historical prices table (${rev.dateStr})`,
+          },
+          create: {
+            fuelKind: "SUPER_DIESEL",
+            pricePerLitre: rev.lsd,
+            effectiveFrom: rev.date,
+            source: "CEYPETCO",
+            enteredById: adminUser.id,
+            note: `Auto-scraped from Ceypetco historical prices table (${rev.dateStr})`,
+          },
+        });
+        changesRecorded++;
+      }
     }
 
-    // Log success
+    // Log success in database AuditLog
     await prisma.auditLog.create({
       data: {
         actorId: adminUser.id,
         action: "PRICE_REFRESH",
         entity: "FuelPrice",
-        summary: `Refreshed Ceypetco prices: Auto Diesel = Rs. ${scrapedAutoPrice / 100}, Super Diesel = Rs. ${scrapedSuperPrice / 100}. Recorded ${changesRecorded} updates.`,
+        summary: `Automatically updated historical fuel prices from Ceypetco: parsed ${parsedRevisions.length} revisions starting Jan 2026; recorded ${changesRecorded} price updates.`,
       },
     });
 
-    console.log(`Ceypetco prices refreshed successfully. Recorded ${changesRecorded} updates.`);
+    console.log(`Ceypetco historical prices updated successfully. Recorded ${changesRecorded} price updates.`);
   } catch (err: any) {
     console.warn("Failed to scrape Ceypetco website:", err.message);
     
@@ -134,7 +176,7 @@ async function refreshPrices() {
         actorId: adminUser.id,
         action: "PRICE_REFRESH",
         entity: "FuelPrice",
-        summary: `Ceypetco scraper failed gracefully: ${err.message}. System continues to use manual overrides.`,
+        summary: `Ceypetco historical prices scraper failed gracefully: ${err.message}. System continues to use existing prices.`,
       },
     });
   } finally {

@@ -197,7 +197,7 @@ async function main() {
   // ── 4. Get a default fuel price ─────────────────────────────────────────────
   // We'll use 35000 cents (Rs. 350/L) as a default for diesel unless one exists
   const existingPrice = await prisma.fuelPrice.findFirst({ orderBy: { effectiveFrom: "desc" } });
-  const fuelPriceCents = existingPrice?.price ?? 35000; // Rs 350/L
+  const fuelPriceCents = existingPrice?.pricePerLitre ?? 35000; // Rs 350/L
 
   // ── 5. Upsert assets + seed January 2026 data ──────────────────────────────
   const JAN_START = new Date("2026-01-01T00:00:00+05:30");

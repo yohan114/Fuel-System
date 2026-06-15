@@ -62,15 +62,24 @@ async function main() {
 
   for (const row of dataRows) {
     const ec: string = String(row[1]).trim().toUpperCase();
+    const reg: string = row[2] ? String(row[2]).trim().toUpperCase() : "";
     const basisRaw: string = typeof row[7] === "string" ? row[7].trim() : "";
     const fuelConsBasis = basisRaw === "KM" ? "km" : "hr";
-    const consEcon: number | null = typeof row[10] === "number" ? row[10] : null;
-    const consTyp: number | null = typeof row[11] === "number" ? row[11] : null;
+    let consEcon: number | null = typeof row[10] === "number" ? row[10] : null;
+    let consTyp: number | null = typeof row[11] === "number" ? row[11] : null;
+
+    if (fuelConsBasis === "km") {
+      if (consEcon && consEcon > 0) consEcon = 1 / consEcon;
+      if (consTyp && consTyp > 0) consTyp = 1 / consTyp;
+    }
 
     if (consEcon == null && consTyp == null) continue;
 
-    // Find the asset
-    const asset = await prisma.asset.findUnique({ where: { code: ec } });
+    // Find the asset by code, then by regNo
+    let asset = await prisma.asset.findUnique({ where: { code: ec } });
+    if (!asset && reg && reg !== "—") {
+      asset = await prisma.asset.findFirst({ where: { regNo: reg } });
+    }
     if (!asset) { noAsset++; continue; }
 
     // RentalRate must exist (created by import_rental_rates.ts)
