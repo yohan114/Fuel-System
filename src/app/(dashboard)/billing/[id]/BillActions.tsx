@@ -2,13 +2,43 @@
 
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RefreshCw, CheckCircle2, Banknote, Save } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, Banknote, Save, Mail } from "lucide-react";
 import {
   updateBillDraftAction,
   regenerateBillAction,
   finalizeBillAction,
   markBillPaidAction,
+  emailInvoiceAction,
 } from "@/app/actions/billing";
+
+function EmailInvoiceButton({ billId }: { billId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={() =>
+          startTransition(async () => {
+            setMsg(null);
+            const res = await emailInvoiceAction(billId);
+            if ((res as any).error) setMsg({ ok: false, text: (res as any).error });
+            else setMsg({ ok: true, text: `Invoice emailed to ${(res as any).sentTo}.` });
+          })
+        }
+        disabled={pending}
+        className="bg-white/5 hover:bg-white/10 border border-white/5 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 disabled:opacity-50"
+      >
+        {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+        Email Invoice to Site
+      </button>
+      {msg && (
+        <div className={`text-xs rounded-xl px-4 py-2.5 border ${msg.ok ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/10" : "bg-red-500/10 text-red-300 border-red-500/10"}`}>
+          {msg.text}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface BillSnapshot {
   id: string;
@@ -128,8 +158,13 @@ export default function BillActions({ bill }: { bill: BillSnapshot }) {
             Mark as Paid
           </button>
         </form>
+        <EmailInvoiceButton billId={bill.id} />
       </div>
     );
+  }
+
+  if (bill.status === "PAID") {
+    return <EmailInvoiceButton billId={bill.id} />;
   }
 
   return null;

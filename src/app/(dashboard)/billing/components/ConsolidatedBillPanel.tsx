@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, FileSpreadsheet } from "lucide-react";
 
 interface Props {
   defaultYear: number;
@@ -12,7 +12,8 @@ export default function ConsolidatedBillPanel({ defaultYear, defaultMonth }: Pro
   const [year, setYear] = useState(defaultYear);
   const [month, setMonth] = useState(defaultMonth);
 
-  const href = `/api/billing/consolidated/pdf?year=${year}&month=${month}`;
+  const pdfHref = `/api/billing/consolidated/pdf?year=${year}&month=${month}`;
+  const xlsxHref = `/api/billing/consolidated/xlsx?year=${year}&month=${month}`;
 
   return (
     <div className="bg-white/5 border border-white/5 p-5 rounded-2xl space-y-4">
@@ -47,15 +48,24 @@ export default function ConsolidatedBillPanel({ defaultYear, defaultMonth }: Pro
             ))}
           </select>
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 flex gap-3">
           <a
-            href={href}
+            href={pdfHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-md"
+            className="flex-1 flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-md"
           >
             <FileText className="w-4 h-4" />
-            Generate Consolidated PDF
+            PDF
+          </a>
+          <a
+            href={xlsxHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-md"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Excel
           </a>
         </div>
       </div>

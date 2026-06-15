@@ -1,11 +1,12 @@
 import React from "react";
-import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { currentMonthPeriod } from "@/lib/billing/period";
 import { Receipt, Wallet, FileText, AlertTriangle } from "lucide-react";
 import GenerateBillsPanel from "./components/GenerateBillsPanel";
 import ConsolidatedBillPanel from "./components/ConsolidatedBillPanel";
+import BillsTable from "./components/BillsTable";
+import AgingReport from "./components/AgingReport";
 
 interface PageProps {
   searchParams: Promise<{ month?: string; site?: string; status?: string }>;
@@ -14,15 +15,6 @@ interface PageProps {
 function rs(cents: number) {
   return "Rs. " + (cents / 100).toLocaleString("en-LK", { maximumFractionDigits: 0 });
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  PAID: "bg-emerald-500/10 text-emerald-400 border-emerald-500/10",
-  ISSUED: "bg-indigo-500/10 text-indigo-400 border-indigo-500/10",
-  DRAFT: "bg-amber-500/10 text-amber-400 border-amber-500/10",
-  OVERDUE: "bg-red-500/10 text-red-400 border-red-500/10",
-};
-
-const MODE_LABEL: Record<string, string> = { hourly: "Hourly", perkm: "Per-KM", perday: "Per-Day" };
 
 export default async function BillingPage(props: PageProps) {
   const session = await getSession();
@@ -146,7 +138,10 @@ export default async function BillingPage(props: PageProps) {
         </div>
       </div>
 
-      {/* Admin generate panel */}
+      {/* Receivables aging (all unpaid invoices, across months) */}
+      <AgingReport projectId={session.role === "USER" ? session.projectId : null} />
+
+      {/* Admin generate panels */}
       {isAdmin && <GenerateBillsPanel defaultYear={y || cur.year} defaultMonth={m || cur.month} />}
       {isAdmin && <ConsolidatedBillPanel defaultYear={y || cur.year} defaultMonth={m || cur.month} />}
 
@@ -156,49 +151,22 @@ export default async function BillingPage(props: PageProps) {
           No bills for {monthLabel}.{isAdmin ? " Use Generate Monthly Bills above." : ""}
         </div>
       ) : (
-        <div className="border border-white/5 rounded-2xl overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-white/5 text-gray-400 font-semibold border-b border-white/5">
-                <th className="px-4 py-3">Vehicle</th>
-                <th className="px-4 py-3">Site</th>
-                <th className="px-4 py-3">Mode / Basis</th>
-                <th className="px-4 py-3 text-right">Billable</th>
-                <th className="px-4 py-3 text-right">Rental</th>
-                <th className="px-4 py-3 text-right">Fuel</th>
-                <th className="px-4 py-3 text-right">Grand Total</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {bills.map((b) => (
-                <tr key={b.id} className="hover:bg-white/[0.02]">
-                  <td className="px-4 py-3">
-                    <Link href={`/billing/${b.id}`} className="font-semibold text-white hover:text-indigo-400">
-                      {b.assetCode}
-                    </Link>
-                    <div className="text-gray-500">{b.assetLabel}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400">{b.projectName || "Unassigned"}</td>
-                  <td className="px-4 py-3 text-gray-400">
-                    {MODE_LABEL[b.billingMode]} <span className="text-gray-600">·</span> {b.rateBasis.toUpperCase()}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-300">
-                    {b.billableUnits.toLocaleString("en-LK", { maximumFractionDigits: 1 })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-300">{rs(b.rentalAmountCents)}</td>
-                  <td className="px-4 py-3 text-right text-gray-300">{b.fuelCostCents > 0 ? rs(b.fuelCostCents) : "—"}</td>
-                  <td className="px-4 py-3 text-right font-bold text-white">{rs(b.grandTotalCents)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${STATUS_STYLES[b.status] || "bg-white/5 text-gray-400 border-white/5"}`}>
-                      {b.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <BillsTable
+          isAdmin={isAdmin}
+          bills={bills.map((b) => ({
+            id: b.id,
+            assetCode: b.assetCode,
+            assetLabel: b.assetLabel,
+            projectName: b.projectName,
+            billingMode: b.billingMode,
+            rateBasis: b.rateBasis,
+            billableUnits: b.billableUnits,
+            rentalAmountCents: b.rentalAmountCents,
+            fuelCostCents: b.fuelCostCents,
+            grandTotalCents: b.grandTotalCents,
+            status: b.status,
+          }))}
+        />
       )}
     </div>
   );

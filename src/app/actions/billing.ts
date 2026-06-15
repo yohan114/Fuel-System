@@ -219,6 +219,197 @@ export async function markBillPaidAction(billId: string, formData: FormData) {
   }
 }
 
+// Bulk-finalize many DRAFT bills into ISSUED invoices in one pass. Skips any
+// that are not DRAFT. Returns per-bill outcomes for the UI.
+export async function bulkFinalizeBillsAction(billIds: string[]) {
+  let admin;
+  try {
+    admin = await assertCan("manage");
+  } catch {
+    return { error: "You are not authorized to issue invoices" };
+  }
+  if (!Array.isArray(billIds) || billIds.length === 0) {
+    return { error: "No bills selected" };
+  }
+
+  const cfg = await getBillingConfig();
+  let finalized = 0;
+  let skipped = 0;
+  const errors: { billId: string; message: string }[] = [];
+
+  for (const billId of billIds) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const bill = await tx.bill.findUnique({ where: { id: billId } });
+        if (!bill) throw new Error("Bill not found");
+        if (bill.status !== "DRAFT") {
+          skipped++;
+          return;
+        }
+        const issuedCount = await tx.bill.count({
+          where: { year: bill.year, month: bill.month, invoiceNumber: { not: null } },
+        });
+        const seq = String(issuedCount + 1).padStart(4, "0");
+        const number = `${cfg.invoicePrefix}-${bill.year}-${pad2(bill.month)}-${seq}`;
+        const issuedDate = new Date();
+        const dueDate = new Date(issuedDate.getTime() + cfg.dueDays * 24 * 60 * 60 * 1000);
+
+        await tx.bill.update({
+          where: { id: billId },
+          data: { status: "ISSUED", invoiceNumber: number, issuedDate, dueDate },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: admin.id,
+            action: "UPDATE",
+            entity: "Bill",
+            entityId: billId,
+            summary: `Issued invoice ${number} for ${bill.assetCode} (${bill.periodKey}) [bulk]`,
+          },
+        });
+        finalized++;
+      });
+    } catch (err: any) {
+      errors.push({ billId, message: err.message || "error" });
+    }
+  }
+
+  revalidatePath("/billing");
+  return { success: true, finalized, skipped, errors };
+}
+
+// Bulk-record full payment against many ISSUED / OVERDUE invoices. Each is
+// marked paid in full (grand total) with today's date. Skips others.
+export async function bulkMarkPaidAction(billIds: string[]) {
+  let admin;
+  try {
+    admin = await assertCan("manage");
+  } catch {
+    return { error: "You are not authorized to record payments" };
+  }
+  if (!Array.isArray(billIds) || billIds.length === 0) {
+    return { error: "No bills selected" };
+  }
+
+  let paid = 0;
+  let skipped = 0;
+  const errors: { billId: string; message: string }[] = [];
+
+  for (const billId of billIds) {
+    try {
+      const bill = await prisma.bill.findUnique({ where: { id: billId } });
+      if (!bill) throw new Error("Bill not found");
+      if (bill.status !== "ISSUED" && bill.status !== "OVERDUE") {
+        skipped++;
+        continue;
+      }
+      await prisma.bill.update({
+        where: { id: billId },
+        data: { status: "PAID", paidDate: new Date(), paidAmountCents: bill.grandTotalCents },
+      });
+      await prisma.auditLog.create({
+        data: {
+          actorId: admin.id,
+          action: "UPDATE",
+          entity: "Bill",
+          entityId: billId,
+          summary: `Recorded full payment for ${bill.invoiceNumber || bill.assetCode}: Rs. ${(bill.grandTotalCents / 100).toLocaleString("en-LK")} [bulk]`,
+        },
+      });
+      paid++;
+    } catch (err: any) {
+      errors.push({ billId, message: err.message || "error" });
+    }
+  }
+
+  revalidatePath("/billing");
+  return { success: true, paid, skipped, errors };
+}
+
+// Email an invoice PDF to the bill's project/site contact email.
+export async function emailInvoiceAction(billId: string) {
+  let admin;
+  try {
+    admin = await assertCan("manage");
+  } catch {
+    return { error: "You are not authorized to send invoices" };
+  }
+
+  const { isMailConfigured, sendMail } = await import("@/lib/mail");
+  const { renderInvoicePdfBuffer, COMPANY } = await import("@/lib/billing/invoice-document");
+
+  if (!isMailConfigured()) {
+    return { error: "Email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM in the environment." };
+  }
+
+  try {
+    const bill = await prisma.bill.findUnique({ where: { id: billId }, include: { lineItems: true } });
+    if (!bill) return { error: "Bill not found" };
+    if (bill.status === "DRAFT") return { error: "Issue the invoice before emailing it" };
+
+    // Resolve the recipient from the project contact.
+    let toEmail: string | null = null;
+    let contactName: string | null = null;
+    if (bill.projectId) {
+      const project = await prisma.project.findUnique({ where: { id: bill.projectId } });
+      toEmail = project?.contactEmail || null;
+      contactName = project?.contactName || null;
+    }
+    if (!toEmail) {
+      return { error: "No contact email on file for this site. Add one on the project before sending." };
+    }
+
+    const monthLabel = new Date(bill.year, bill.month - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+    const grand = "Rs. " + (bill.grandTotalCents / 100).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const due = bill.dueDate ? new Date(bill.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+    const pdf = await renderInvoicePdfBuffer(bill);
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;color:#1e293b;max-width:560px;margin:0 auto">
+        <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0">
+          <div style="font-size:16px;font-weight:bold">${COMPANY.name}</div>
+          <div style="font-size:11px;color:#93c5fd">${COMPANY.division}</div>
+        </div>
+        <div style="padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
+          <p>Dear ${contactName || "Sir/Madam"},</p>
+          <p>Please find attached your machine rental invoice <strong>${bill.invoiceNumber}</strong> for <strong>${monthLabel}</strong>.</p>
+          <table style="font-size:13px;margin:16px 0">
+            <tr><td style="color:#64748b;padding:2px 12px 2px 0">Invoice</td><td><strong>${bill.invoiceNumber}</strong></td></tr>
+            <tr><td style="color:#64748b;padding:2px 12px 2px 0">Vehicle</td><td>${bill.assetCode} — ${bill.assetLabel || ""}</td></tr>
+            <tr><td style="color:#64748b;padding:2px 12px 2px 0">Amount Due</td><td><strong>${grand}</strong></td></tr>
+            <tr><td style="color:#64748b;padding:2px 12px 2px 0">Due Date</td><td>${due}</td></tr>
+          </table>
+          <p style="font-size:12px;color:#64748b">Thank you for your business.<br/>${COMPANY.name} · ${COMPANY.phone}</p>
+        </div>
+      </div>`;
+
+    await sendMail({
+      to: toEmail,
+      subject: `Invoice ${bill.invoiceNumber} — ${COMPANY.name} (${monthLabel})`,
+      html,
+      text: `Invoice ${bill.invoiceNumber} for ${monthLabel}. Amount due: ${grand}. Due date: ${due}.`,
+      attachments: [{ filename: `invoice_${bill.assetCode}_${bill.periodKey}.pdf`, content: pdf, contentType: "application/pdf" }],
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: "UPDATE",
+        entity: "Bill",
+        entityId: billId,
+        summary: `Emailed invoice ${bill.invoiceNumber} to ${toEmail}`,
+      },
+    });
+
+    revalidatePath(`/billing/${billId}`);
+    return { success: true, sentTo: toEmail };
+  } catch (err: any) {
+    console.error("Email invoice error:", err);
+    return { error: err.message || "Failed to email invoice" };
+  }
+}
+
 // Sweep ISSUED bills past their due date to OVERDUE.
 export async function markOverdueAction() {
   let admin;
