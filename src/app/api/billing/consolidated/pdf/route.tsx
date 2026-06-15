@@ -14,12 +14,26 @@ const GRAY_LIGHT = "#e2e8f0";
 
 const styles = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 9, color: "#1e293b", backgroundColor: WHITE },
-  headerBand: { backgroundColor: NAVY, padding: "18 32 14 32", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  companyName: { fontSize: 14, fontFamily: "Helvetica-Bold", color: WHITE },
-  companyDiv: { fontSize: 8, color: "#93c5fd", marginTop: 2 },
-  docTitle: { fontSize: 16, fontFamily: "Helvetica-Bold", color: AMBER, textAlign: "right" },
-  docSub: { fontSize: 8, color: "#93c5fd", textAlign: "right", marginTop: 3 },
+
+  // Header — matches InvoiceDocument exactly
+  headerBand: { backgroundColor: NAVY, padding: "20 32 16 32", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  logoBox: { flexDirection: "row", alignItems: "center", gap: 10 },
+  logoMark: { backgroundColor: AMBER, borderRadius: 4, padding: "6 10", alignItems: "center", justifyContent: "center" },
+  logoMarkText: { fontSize: 16, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1 },
+  companyName: { fontSize: 15, fontFamily: "Helvetica-Bold", color: WHITE, letterSpacing: 0.5 },
+  companyDiv: { fontSize: 8, color: "#93c5fd", marginTop: 3 },
+  companyDoc: { fontSize: 7, color: "#cbd5e1", marginTop: 2, letterSpacing: 0.3 },
+  docTitle: { fontSize: 20, fontFamily: "Helvetica-Bold", color: AMBER, textAlign: "right", letterSpacing: 1 },
+  docSub: { fontSize: 8, color: "#93c5fd", textAlign: "right", marginTop: 4 },
+
   accentStrip: { backgroundColor: AMBER, height: 3 },
+
+  // Info bar — matches invoice infoBar
+  infoBar: { backgroundColor: LIGHT, padding: "10 32", flexDirection: "row", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: GRAY_LIGHT },
+  infoItem: { flexDirection: "column" },
+  infoLabel: { fontSize: 7, color: GRAY, fontFamily: "Helvetica-Bold", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
+  infoVal: { fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold" },
+
   body: { padding: "14 32" },
 
   // Summary cards
@@ -27,12 +41,11 @@ const styles = StyleSheet.create({
   summaryCard: { flex: 1, backgroundColor: LIGHT, borderRadius: 4, padding: "8 10", borderWidth: 1, borderColor: GRAY_LIGHT },
   summaryLabel: { fontSize: 7, fontFamily: "Helvetica-Bold", color: GRAY, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 },
   summaryVal: { fontSize: 14, fontFamily: "Helvetica-Bold", color: NAVY },
-  summaryUnit: { fontSize: 7, color: GRAY },
 
-  secHeading: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: NAVY, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5 },
+  secHeading: { fontSize: 7.5, fontFamily: "Helvetica-Bold", color: NAVY, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5, marginTop: 12 },
 
   // Vehicle table
-  table: { width: "100%" },
+  table: { width: "100%", marginTop: 4 },
   tHead: { flexDirection: "row", backgroundColor: NAVY, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 6 },
   tHeadCell: { fontSize: 7, fontFamily: "Helvetica-Bold", color: WHITE, textTransform: "uppercase", letterSpacing: 0.4 },
   tRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: GRAY_LIGHT, paddingVertical: 5, paddingHorizontal: 6 },
@@ -47,8 +60,9 @@ const styles = StyleSheet.create({
   tCell: { fontSize: 7.5, color: "#334155" },
   tCellBold: { fontFamily: "Helvetica-Bold", color: NAVY },
 
-  // Totals
-  totalsBox: { marginTop: 12, marginLeft: "auto", width: "38%", borderWidth: 1, borderColor: GRAY_LIGHT, borderRadius: 4, overflow: "hidden" },
+  // Totals — matches invoice totalsBox
+  totalsOuter: { flexDirection: "row", justifyContent: "flex-end", marginTop: 14 },
+  totalsBox: { width: "44%", borderWidth: 1, borderColor: GRAY_LIGHT, borderRadius: 4, overflow: "hidden" },
   totRow: { flexDirection: "row", justifyContent: "space-between", padding: "5 10", borderBottomWidth: 1, borderBottomColor: GRAY_LIGHT },
   totLabel: { fontSize: 8, color: GRAY },
   totVal: { fontSize: 8, color: "#334155", fontFamily: "Helvetica-Bold" },
@@ -61,7 +75,7 @@ const styles = StyleSheet.create({
   footerSub: { fontSize: 7, color: "#78350f" },
 
   // Site section
-  siteHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: NAVY, borderRadius: 4, padding: "7 12", marginTop: 14, marginBottom: 6 },
+  siteHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: NAVY, borderRadius: 4, padding: "7 12", marginTop: 16, marginBottom: 6 },
   siteName: { fontSize: 10, fontFamily: "Helvetica-Bold", color: WHITE },
   siteMeta: { fontSize: 7.5, color: "#93c5fd" },
   siteSubtotalRow: { flexDirection: "row", justifyContent: "flex-end", gap: 16, backgroundColor: LIGHT, borderRadius: 3, padding: "5 12", marginTop: 4, borderWidth: 1, borderColor: GRAY_LIGHT },
@@ -118,36 +132,68 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
   return (
     <Document>
       <Page size="A4" style={styles.page} wrap>
+        {/* Header band — same layout as TAX INVOICE */}
         <View style={styles.headerBand} fixed>
-          <View>
-            <Text style={styles.companyName}>{COMPANY.name}</Text>
-            <Text style={styles.companyDiv}>{COMPANY.division}</Text>
+          <View style={styles.logoBox}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoMarkText}>E&C</Text>
+            </View>
+            <View>
+              <Text style={styles.companyName}>{COMPANY.name}</Text>
+              <Text style={styles.companyDiv}>{COMPANY.division}</Text>
+              <Text style={styles.companyDoc}>Doc No: {COMPANY.docNumber}</Text>
+            </View>
           </View>
           <View>
             <Text style={styles.docTitle}>CONSOLIDATED BILLING</Text>
-            <Text style={styles.docSub}>By Site · {monthLabel} · Generated: {generatedAt}</Text>
+            <Text style={styles.docSub}>By Site · {monthLabel}</Text>
+            <Text style={styles.docSub}>Generated: {generatedAt}</Text>
           </View>
         </View>
         <View style={styles.accentStrip} fixed />
 
+        {/* Info bar — mirrors invoice infoBar */}
+        <View style={styles.infoBar} fixed>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Period</Text>
+            <Text style={styles.infoVal}>{monthLabel}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Sites</Text>
+            <Text style={styles.infoVal}>{siteGroups.length}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Total Vehicles</Text>
+            <Text style={styles.infoVal}>{bills.length}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Grand Total</Text>
+            <Text style={[styles.infoVal, { color: AMBER }]}>{rs(total.grand)}</Text>
+          </View>
+        </View>
+
         <View style={styles.body}>
-          {/* KPI cards */}
+          {/* Summary cards */}
           <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Sites</Text>
-              <Text style={styles.summaryVal}>{siteGroups.length}</Text>
-            </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Vehicles</Text>
-              <Text style={styles.summaryVal}>{bills.length}</Text>
-            </View>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>Total Rental</Text>
               <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(total.rental)}</Text>
             </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total Fuel</Text>
+              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(total.fuel)}</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total SSCL</Text>
+              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(total.sscl)}</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Total VAT</Text>
+              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(total.vat)}</Text>
+            </View>
             <View style={[styles.summaryCard, { borderColor: NAVY, borderWidth: 1.5 }]}>
               <Text style={styles.summaryLabel}>Grand Total</Text>
-              <Text style={[styles.summaryVal, { fontSize: 11, color: NAVY }]}>{rs(total.grand)}</Text>
+              <Text style={[styles.summaryVal, { fontSize: 11 }]}>{rs(total.grand)}</Text>
             </View>
           </View>
 
@@ -156,7 +202,7 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
             {Object.entries(statusCounts).map(([status, count]) => (
               <View key={status} style={{ backgroundColor: LIGHT, borderRadius: 4, padding: "5 8", borderWidth: 1, borderColor: GRAY_LIGHT }}>
                 <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: STATUS_COLORS[status] || GRAY }}>{status}</Text>
-                <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold", color: "#334155" }}>{count}</Text>
+                <Text style={{ fontSize: 10, fontFamily: "Helvetica-Bold", color: "#334155" }}>{count as number}</Text>
               </View>
             ))}
           </View>
@@ -165,7 +211,7 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
           {siteGroups.map((group) => {
             const st = sumBills(group.bills);
             return (
-              <View key={group.name} wrap={false}>
+              <View key={group.name}>
                 <View style={styles.siteHeader}>
                   <Text style={styles.siteName}>{group.name}</Text>
                   <Text style={styles.siteMeta}>{group.bills.length} vehicle(s) · {rs(st.grand)}</Text>
@@ -204,33 +250,36 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
             );
           })}
 
-          {/* Grand totals across all sites */}
-          <View style={styles.totalsBox}>
-            <View style={styles.totRow}>
-              <Text style={styles.totLabel}>Total Rental</Text>
-              <Text style={styles.totVal}>{rs(total.rental)}</Text>
-            </View>
-            <View style={styles.totRow}>
-              <Text style={styles.totLabel}>Total Fuel</Text>
-              <Text style={styles.totVal}>{rs(total.fuel)}</Text>
-            </View>
-            <View style={styles.totRow}>
-              <Text style={styles.totLabel}>Total SSCL</Text>
-              <Text style={styles.totVal}>{rs(total.sscl)}</Text>
-            </View>
-            <View style={styles.totRow}>
-              <Text style={styles.totLabel}>Total VAT</Text>
-              <Text style={styles.totVal}>{rs(total.vat)}</Text>
-            </View>
-            <View style={styles.grandRow}>
-              <Text style={styles.grandLabel}>Grand Total</Text>
-              <Text style={styles.grandVal}>{rs(total.grand)}</Text>
+          {/* Grand totals — matches invoice totalsBox layout */}
+          <View style={styles.totalsOuter}>
+            <View style={styles.totalsBox}>
+              <View style={styles.totRow}>
+                <Text style={styles.totLabel}>Total Rental</Text>
+                <Text style={styles.totVal}>{rs(total.rental)}</Text>
+              </View>
+              <View style={styles.totRow}>
+                <Text style={styles.totLabel}>Total Fuel</Text>
+                <Text style={styles.totVal}>{rs(total.fuel)}</Text>
+              </View>
+              <View style={styles.totRow}>
+                <Text style={styles.totLabel}>Total SSCL</Text>
+                <Text style={styles.totVal}>{rs(total.sscl)}</Text>
+              </View>
+              <View style={styles.totRow}>
+                <Text style={styles.totLabel}>Total VAT</Text>
+                <Text style={styles.totVal}>{rs(total.vat)}</Text>
+              </View>
+              <View style={styles.grandRow}>
+                <Text style={styles.grandLabel}>Grand Total</Text>
+                <Text style={styles.grandVal}>{rs(total.grand)}</Text>
+              </View>
             </View>
           </View>
         </View>
 
+        {/* Footer — amber band like TAX INVOICE */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>{COMPANY.name} — Consolidated Statement (by Site) · {monthLabel}</Text>
+          <Text style={styles.footerText}>Thank you for your business!</Text>
           <Text style={styles.footerSub} render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`} />
         </View>
       </Page>
