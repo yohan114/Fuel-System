@@ -32,7 +32,7 @@ if (fs.existsSync(envPath)) {
 const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || "file:./data/app.db" });
 const prisma = new PrismaClient({ adapter });
 
-const UPLOADS = "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
+const UPLOADS = process.env.UPLOADS_DIR || "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
 const FILES = [
   { file: "128f30f0-BADALGAMA_PLANT_March_2026_1.xlsx", year: 2026, month: 3 },
   { file: "33df6f28-Badalgama_PlantApril2026_1.xlsx",   year: 2026, month: 4 },

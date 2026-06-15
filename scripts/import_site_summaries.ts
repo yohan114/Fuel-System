@@ -45,7 +45,7 @@ if (fs.existsSync(envPath)) {
 const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || "file:./data/app.db" });
 const prisma = new PrismaClient({ adapter });
 
-const UPLOADS = "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
+const UPLOADS = process.env.UPLOADS_DIR || "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
 const SITES: { code: string; name: string; files: string[] }[] = [
   { code: "GB",   name: "Gampaha Bridge",  files: ["05d37c9a-machines_Vehicles_at_Gampaha_Bridge__2.xlsb"] },
   { code: "INGI", name: "Inginimitiya",    files: ["5c29a0f0-Inginimitiya_Vehicle_Machinery_summary.xlsx"] },
