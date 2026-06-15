@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start -p 6600",
     "lint": "eslint",
-    "import:rates": "tsx scripts/import_rental_rates.ts",
     "seed:all": "tsx scripts/feed_all.ts"
   },
   "dependencies": {
