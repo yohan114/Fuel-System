@@ -32,12 +32,12 @@ if (fs.existsSync(envPath)) {
 const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || "file:./data/app.db" });
 const prisma = new PrismaClient({ adapter });
 
-const UPLOADS = "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
+const UPLOADS = "C:/Users/HP/Downloads";
 const FILES = [
-  { path: path.join(UPLOADS, "9bf3fcb8-01_January_2026.xlsb"),  year: 2026, month: 1 },
-  { path: path.join(UPLOADS, "da2e905a-02_February_2026.xlsb"), year: 2026, month: 2 },
-  { path: path.join(UPLOADS, "643abce9-03_March_2026.xlsb"),    year: 2026, month: 3 },
-  { path: path.join(UPLOADS, "fad40363-04_April_2026.xlsb"),    year: 2026, month: 4 },
+  { path: path.join(UPLOADS, "01 January 2026.xlsb"),  year: 2026, month: 1 },
+  { path: path.join(UPLOADS, "02 February 2026.xlsb"), year: 2026, month: 2 },
+  { path: path.join(UPLOADS, "03 March 2026.xlsb"),    year: 2026, month: 3 },
+  { path: path.join(UPLOADS, "04 April 2026.xlsb"),    year: 2026, month: 4 },
 ];
 
 const WINDOW_START = new Date("2026-01-01T00:00:00+05:30");

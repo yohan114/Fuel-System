@@ -45,7 +45,7 @@ if (fs.existsSync(envPath)) {
 const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || "file:./data/app.db" });
 const prisma = new PrismaClient({ adapter });
 
-const UPLOADS = "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
+const UPLOADS = "C:/Users/HP/Downloads";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function toFloat(v: unknown): number { const n = parseFloat(String(v)); return isNaN(n) ? 0 : n; }
@@ -293,7 +293,7 @@ async function main() {
 
   // ── 1. Inginimitiya ──────────────────────────────────────────────────────────
   console.log("── Inginimitiya ──────────────────────────────────────────────");
-  const ingiFile = path.join(UPLOADS, "15863503-Inginimitiya_Vehicle_Machinery_summary.xlsx");
+  const ingiFile = path.join(UPLOADS, "Inginimitiya Vehicle, Machinery summary.xlsx");
   let ingiProject = await prisma.project.findFirst({ where: { code: "INGI" } });
   if (!ingiProject) {
     ingiProject = await prisma.project.create({ data: { name: "Inginimitiya", code: "INGI" } });
@@ -322,7 +322,7 @@ async function main() {
 
   // ── 2. Karativu Bridge ───────────────────────────────────────────────────────
   console.log("\n── Karativu Bridge ───────────────────────────────────────────");
-  const kbFile = path.join(UPLOADS, "d3e8521f-machines_cost_Karativu_Bridge__1.xlsb");
+  const kbFile = path.join(UPLOADS, "machines cost Karativu Bridge - 1.xlsb");
   let kbProject = await prisma.project.findFirst({ where: { code: "KB" } });
   if (!kbProject) {
     kbProject = await prisma.project.create({ data: { name: "Karativu Bridge", code: "KB" } });
@@ -350,7 +350,7 @@ async function main() {
 
   // ── 3. Gampaha Bridge 2 (new monthly data Jan–Mar 2026) ──────────────────────
   console.log("\n── Gampaha Bridge (supplemental Jan–Mar 2026) ────────────────");
-  const gbFile = path.join(UPLOADS, "636ff10c-machines_Vehicles_at_Gampaha_Bridge__2_1.xlsb");
+  const gbFile = path.join(UPLOADS, "machines, Vehicles at Gampaha Bridge - 2.xlsb");
   const gbProject = await prisma.project.findFirst({ where: { code: "GB" } });
   if (!gbProject) {
     console.warn("  ⚠ Gampaha Bridge project not found");
@@ -375,7 +375,7 @@ async function main() {
 
   // ── 4. May 2026 day-by-day running ────────────────────────────────────────────
   console.log("\n── May 2026 daily running ────────────────────────────────────");
-  const mayFile = path.join(UPLOADS, "613bb3fa-05_May_2026_1.xlsb");
+  const mayFile = path.join(UPLOADS, "05 May 2026.xlsb");
   if (fs.existsSync(mayFile)) {
     const wb = XLSX.readFile(mayFile, { cellDates: false });
     for (const sn of wb.SheetNames) {
