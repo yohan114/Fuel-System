@@ -43,7 +43,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       ["Fuel Litres", bill.fuelLitres],
       [],
       ["Rental (LKR)", lkr(bill.rentalAmountCents)],
-      ["Fuel Charged (LKR)", lkr(bill.fuelCostCents)],
+      ["Fuel Charged (LKR)", bill.rateBasis === "fw" ? lkr(bill.fuelCostCents) : 0],
       ["Subtotal (LKR)", lkr(bill.subtotalCents)],
       [`SSCL ${(bill.ssclRate * 100).toFixed(1)}% (LKR)`, lkr(bill.ssclCents)],
       [`VAT ${(bill.vatRate * 100).toFixed(1)}% (LKR)`, lkr(bill.vatCents)],

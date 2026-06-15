@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, FileSpreadsheet, Building2, Calendar } from "lucide-react";
-import { unitLabel, basisLabel, modeLabel, type BillingMode } from "@/lib/billing/calc";
+import { unitLabel, basisLabel, modeLabel, type BillingMode, type RateBasis } from "@/lib/billing/calc";
 import BillActions from "./BillActions";
 import BillingRunningChart from "../components/BillingRunningChart";
 
@@ -109,7 +109,7 @@ export default async function BillDetailPage(props: PageProps) {
           <div>
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Billing</p>
             <p className="text-sm font-bold text-white mt-1">{modeLabel(bill.billingMode as BillingMode)}</p>
-            <p className="text-xs text-gray-500">{basisLabel(bill.rateBasis as any)}</p>
+            <p className="text-xs text-gray-500">{basisLabel(bill.rateBasis as RateBasis)}</p>
           </div>
           <div>
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">Grand Total</p>
@@ -144,7 +144,7 @@ export default async function BillDetailPage(props: PageProps) {
             <Row label={`Rate (per ${unit})`} value={rs(bill.rateCents)} />
             <div className="border-t border-white/5 my-2" />
             <Row label="Rental amount" value={rs(bill.rentalAmountCents)} strong />
-            <Row label={`Fuel (${bill.fuelLitres.toLocaleString("en-LK", { maximumFractionDigits: 1 })} L)`} value={bill.fuelCostCents > 0 ? rs(bill.fuelCostCents) : `Not billed (${basisLabel(bill.rateBasis as any)})`} />
+            <Row label={`Fuel (${bill.fuelLitres.toLocaleString("en-LK", { maximumFractionDigits: 1 })} L)`} value={bill.rateBasis === "fw" && bill.fuelCostCents > 0 ? rs(bill.fuelCostCents) : `Not billed (${basisLabel(bill.rateBasis as RateBasis)})`} />
           </dl>
         </div>
 
