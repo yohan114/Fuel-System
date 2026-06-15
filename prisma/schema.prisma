@@ -294,6 +294,11 @@ model RentalRate {
   portDwCents   Int?
   portDdCents   Int?
 
+  // Fuel consumption rates from the Fuel Rates sheet (L/hr or L/km)
+  fuelConsEcon  Float?   // economic (light load) consumption
+  fuelConsTyp   Float?   // typical consumption
+  fuelConsBasis String?  // "hr" | "km"
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -355,6 +360,14 @@ model Bill {
   paymentNote   String?
 
   notes         String?
+
+  // Fuel-derived units (when no meter readings exist)
+  derivedFromFuel Boolean @default(false)
+  fuelConsMidRate Float?  // mid consumption rate used (L/hr or L/km)
+
+  // Breakdown deduction
+  breakdownDays        Int @default(0)
+  breakdownDeductCents Int @default(0)
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -70,6 +70,14 @@ export async function generateBillForAsset(
   let openingMeter: number | null = null;
   let closingMeter: number | null = null;
   let actualUnits = 0;
+  let derivedFromFuel = false;
+  let fuelConsMidRate: number | null = null;
+
+  // Count breakdown days in period (used for display + deduction)
+  const breakdownDays = await prisma.dailyCondition.count({
+    where: { assetId: asset.id, status: "BREAKDOWN", logDate: { gte: period.start, lte: period.end } },
+  });
+
   if (billingMode === "hourly" || billingMode === "perkm") {
     const meterType = billingMode === "perkm" ? "KM" : "HOURS";
     const rd = await computeRunningDelta(asset.id, meterType, period.start, period.end);
@@ -81,6 +89,35 @@ export async function generateBillForAsset(
   }
 
   const fuel = await sumFuelForMonth(asset.id, period.start, period.end);
+
+  // Fuel-based unit derivation: when no meter readings exist but fuel was issued
+  // and a fuel consumption rate is available, derive units from litres / midCons.
+  if (
+    actualUnits === 0 &&
+    fuel.litres > 0 &&
+    (billingMode === "hourly" || billingMode === "perkm") &&
+    asset.rentalRate.fuelConsEcon != null &&
+    asset.rentalRate.fuelConsTyp != null
+  ) {
+    const midCons = (asset.rentalRate.fuelConsEcon + asset.rentalRate.fuelConsTyp) / 2;
+    if (midCons > 0) {
+      actualUnits = fuel.litres / midCons;
+      fuelConsMidRate = midCons;
+      derivedFromFuel = true;
+    }
+  }
+
+  // Breakdown deduction for hourly/perkm: estimate units lost during breakdown days.
+  let breakdownDeductCents = 0;
+  if (breakdownDays > 0 && (billingMode === "hourly" || billingMode === "perkm")) {
+    const workingDays = await countWorkingDays(asset.id, period.start, period.end);
+    const totalDays = workingDays + breakdownDays;
+    if (totalDays > 0 && actualUnits > 0) {
+      const unitsPerDay = actualUnits / totalDays;
+      const deductUnits = unitsPerDay * breakdownDays;
+      breakdownDeductCents = Math.round(deductUnits * rateCents);
+    }
+  }
 
   const totals = computeTotals({
     billingMode,
@@ -98,7 +135,8 @@ export async function generateBillForAsset(
   const assetLabel =
     [asset.brand, asset.model].filter(Boolean).join(" ").trim() || asset.category.name;
 
-  // Line items: rental always, fuel only when actually charged (fw + litres).
+  // Line items: rental always, fuel only when actually charged (fw + litres),
+  // breakdown deduction as ADJUSTMENT when applicable.
   const lineItems: {
     kind: string;
     description: string;
@@ -111,7 +149,7 @@ export async function generateBillForAsset(
       kind: "RENTAL",
       description: pickedRate == null
         ? `Machine rental (no rate card tier for ${billingMode}/${rateBasis})`
-        : `Machine rental — ${billingMode} (${rateBasis.toUpperCase()})`,
+        : `Machine rental — ${billingMode} (${rateBasis.toUpperCase()})${derivedFromFuel ? " [units from fuel]" : ""}`,
       quantity: totals.billableUnits,
       unit,
       unitRateCents: rateCents,
@@ -127,6 +165,16 @@ export async function generateBillForAsset(
       unit: "L",
       unitRateCents: avgPerL,
       amountCents: totals.fuelChargedCents,
+    });
+  }
+  if (breakdownDeductCents > 0) {
+    lineItems.push({
+      kind: "ADJUSTMENT",
+      description: `Breakdown deduction (${breakdownDays} day${breakdownDays !== 1 ? "s" : ""} out of service)`,
+      quantity: breakdownDays,
+      unit: "day",
+      unitRateCents: 0,
+      amountCents: -breakdownDeductCents,
     });
   }
 
@@ -161,6 +209,10 @@ export async function generateBillForAsset(
     vatCents: totals.vatCents,
     grandTotalCents: totals.grandTotalCents,
     generatedById: opts.actorId ?? null,
+    derivedFromFuel,
+    fuelConsMidRate,
+    breakdownDays,
+    breakdownDeductCents,
   };
 
   const billId = await prisma.$transaction(async (tx) => {

@@ -44,7 +44,9 @@ export default async function BillDetailPage(props: PageProps) {
     notFound();
   }
 
-  // Chart data for the month.
+  // Chart data: fetch all readings within the period window.
+  // If none exist in the window, synthesise two points from the bill snapshot
+  // so the chart always has data when meter readings exist outside the month.
   let readingsData: { date: string; value: number }[] = [];
   if (bill.billingMode === "hourly" || bill.billingMode === "perkm") {
     const meterType = bill.billingMode === "perkm" ? "KM" : "HOURS";
@@ -56,6 +58,12 @@ export default async function BillDetailPage(props: PageProps) {
       date: new Date(r.readingDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
       value: r.value,
     }));
+    if (readingsData.length === 0 && bill.openingMeter != null && bill.closingMeter != null) {
+      readingsData = [
+        { date: new Date(bill.periodStart).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), value: bill.openingMeter },
+        { date: new Date(bill.periodEnd).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }), value: bill.closingMeter },
+      ];
+    }
   }
   const fuelIssues = await prisma.fuelIssue.findMany({
     where: { assetId: bill.assetId, issueDate: { gte: bill.periodStart, lte: bill.periodEnd } },
@@ -65,6 +73,18 @@ export default async function BillDetailPage(props: PageProps) {
     date: new Date(f.issueDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
     litres: f.litres,
   }));
+
+  // Breakdown history for the billing period
+  const breakdownConditions = bill.breakdownDays > 0
+    ? await prisma.dailyCondition.findMany({
+        where: {
+          assetId: bill.assetId,
+          logDate: { gte: bill.periodStart, lte: bill.periodEnd },
+        },
+        orderBy: { logDate: "asc" },
+        include: { recordedBy: { select: { name: true } } },
+      })
+    : [];
 
   const unit = unitLabel(bill.billingMode as BillingMode);
   const monthLabel = new Date(bill.year, bill.month - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
@@ -135,15 +155,24 @@ export default async function BillDetailPage(props: PageProps) {
         <div className="bg-[#121420] border border-white/5 rounded-2xl p-6">
           <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4">Rental & Usage</h3>
           <dl className="space-y-2.5 text-xs">
-            <Row label={`Actual ${unit}`} value={bill.actualUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })} />
+            <Row
+              label={`Actual ${unit}${bill.derivedFromFuel ? " (fuel-derived)" : ""}`}
+              value={bill.actualUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })}
+            />
             <Row label={`Minimum guaranteed ${unit}`} value={bill.minimumUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })} />
             <Row label={`Billable ${unit}`} value={bill.billableUnits.toLocaleString("en-LK", { maximumFractionDigits: 2 })} strong />
             {bill.openingMeter != null && (
               <Row label="Opening → Closing meter" value={`${bill.openingMeter.toLocaleString()} → ${bill.closingMeter?.toLocaleString() ?? "—"}`} />
             )}
+            {bill.breakdownDays > 0 && (
+              <Row label="Breakdown days" value={`${bill.breakdownDays} day${bill.breakdownDays !== 1 ? "s" : ""}`} />
+            )}
             <Row label={`Rate (per ${unit})`} value={rs(bill.rateCents)} />
             <div className="border-t border-white/5 my-2" />
             <Row label="Rental amount" value={rs(bill.rentalAmountCents)} strong />
+            {bill.breakdownDeductCents > 0 && (
+              <Row label="Breakdown deduction" value={`− ${rs(bill.breakdownDeductCents)}`} />
+            )}
             <Row label={`Fuel (${bill.fuelLitres.toLocaleString("en-LK", { maximumFractionDigits: 1 })} L)`} value={bill.rateBasis === "fw" && bill.fuelCostCents > 0 ? rs(bill.fuelCostCents) : `Not billed (${basisLabel(bill.rateBasis as RateBasis)})`} />
           </dl>
         </div>
@@ -188,10 +217,45 @@ export default async function BillDetailPage(props: PageProps) {
         </table>
       </div>
 
+      {bill.derivedFromFuel && (
+        <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4 text-xs text-amber-300 flex items-start gap-3">
+          <span className="text-amber-400 font-bold uppercase tracking-wider text-[10px] shrink-0 mt-0.5">Notice</span>
+          <p>
+            Actual {unit} derived from fuel consumption rate ({bill.fuelConsMidRate != null ? bill.fuelConsMidRate.toFixed(2) : "—"} L/{unit === "km" ? "km" : "hr"} mid-value) — no meter readings found for this period.
+          </p>
+        </div>
+      )}
+
       {bill.notes && (
         <div className="bg-[#121420] border border-white/5 rounded-2xl p-5 text-xs text-gray-400">
           <span className="text-gray-500 font-semibold uppercase tracking-wider text-[10px]">Notes</span>
           <p className="mt-2">{bill.notes}</p>
+        </div>
+      )}
+
+      {/* Breakdown history */}
+      {bill.breakdownDays > 0 && (
+        <div className="bg-[#121420] border border-red-500/10 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Breakdown History</h3>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-gray-400">{bill.breakdownDays} breakdown day{bill.breakdownDays !== 1 ? "s" : ""} in period</span>
+              {bill.breakdownDeductCents > 0 && (
+                <span className="text-red-400 font-bold">Deduction: {rs(bill.breakdownDeductCents)}</span>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1">
+            {breakdownConditions.map((c) => (
+              <div key={c.id} className={`flex items-center gap-3 text-xs px-3 py-2 rounded-xl ${c.status === "BREAKDOWN" ? "bg-red-500/5 border border-red-500/10" : "bg-emerald-500/5 border border-emerald-500/10"}`}>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${c.status === "BREAKDOWN" ? "bg-red-500" : "bg-emerald-500"}`} />
+                <span className="text-gray-300 font-mono w-24 shrink-0">{new Date(c.logDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</span>
+                <span className={`font-semibold w-20 shrink-0 ${c.status === "BREAKDOWN" ? "text-red-400" : "text-emerald-400"}`}>{c.status}</span>
+                <span className="text-gray-500">{c.note || "—"}</span>
+                <span className="ml-auto text-gray-600 shrink-0">{c.recordedBy.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
