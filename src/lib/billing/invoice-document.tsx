@@ -1,5 +1,5 @@
 import React from "react";
-import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, renderToBuffer, Svg, Path, Line } from "@react-pdf/renderer";
 
 const NAVY = "#1e3a5f";
 const AMBER = "#f59e0b";
@@ -23,8 +23,7 @@ const styles = StyleSheet.create({
 
   headerBand: { backgroundColor: NAVY, padding: "20 32 16 32", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   logoBox: { flexDirection: "row", alignItems: "center", gap: 10 },
-  logoMark: { backgroundColor: AMBER, borderRadius: 4, padding: "6 10", alignItems: "center", justifyContent: "center" },
-  logoMarkText: { fontSize: 16, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1 },
+  logoMark: { backgroundColor: WHITE, borderRadius: 6, padding: 5, alignItems: "center", justifyContent: "center" },
   companyName: { fontSize: 15, fontFamily: "Helvetica-Bold", color: WHITE, letterSpacing: 0.5 },
   companyDiv: { fontSize: 8, color: "#93c5fd", marginTop: 3 },
   companyDoc: { fontSize: 7, color: "#cbd5e1", marginTop: 2, letterSpacing: 0.3 },
@@ -84,6 +83,21 @@ const styles = StyleSheet.create({
   footerSub: { fontSize: 7, color: "#78350f" },
 });
 
+// E&C company logo (vector): black "e" ring + crossbar with an orange "c" nested inside.
+// Rendered on a white tile so it stays visible on the navy header band.
+export function EcLogo({ size = 34 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      {/* Black outer "e" — near-full ring, open on the right */}
+      <Path d="M79.49 70.65 A36 36 0 1 1 79.49 29.35" stroke="#111111" strokeWidth={12} fill="none" strokeLinecap="round" />
+      {/* "e" crossbar (tongue) into the opening */}
+      <Line x1="49" y1="50" x2="82" y2="50" stroke="#111111" strokeWidth={12} strokeLinecap="round" />
+      {/* Orange inner "c" — open on the right */}
+      <Path d="M66.09 63.50 A21 21 0 1 1 66.09 36.50" stroke="#f5a01e" strokeWidth={11} fill="none" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 function rs(cents: number) {
   return "Rs. " + (cents / 100).toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -101,7 +115,7 @@ export function InvoiceDocument({ bill }: { bill: any }) {
         <View style={styles.headerBand}>
           <View style={styles.logoBox}>
             <View style={styles.logoMark}>
-              <Text style={styles.logoMarkText}>E&C</Text>
+              <EcLogo size={34} />
             </View>
             <View>
               <Text style={styles.companyName}>{COMPANY.name}</Text>

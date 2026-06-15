@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Document, Page, Text, View, StyleSheet, renderToStream } from "@react-pdf/renderer";
-import { COMPANY } from "@/lib/billing/invoice-document";
+import { COMPANY, EcLogo } from "@/lib/billing/invoice-document";
 
 const NAVY = "#1e3a5f";
 const AMBER = "#f59e0b";
@@ -18,8 +18,7 @@ const styles = StyleSheet.create({
   // Header — matches InvoiceDocument exactly
   headerBand: { backgroundColor: NAVY, padding: "20 32 16 32", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   logoBox: { flexDirection: "row", alignItems: "center", gap: 10 },
-  logoMark: { backgroundColor: AMBER, borderRadius: 4, padding: "6 10", alignItems: "center", justifyContent: "center" },
-  logoMarkText: { fontSize: 16, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1 },
+  logoMark: { backgroundColor: WHITE, borderRadius: 6, padding: 5, alignItems: "center", justifyContent: "center" },
   companyName: { fontSize: 15, fontFamily: "Helvetica-Bold", color: WHITE, letterSpacing: 0.5 },
   companyDiv: { fontSize: 8, color: "#93c5fd", marginTop: 3 },
   companyDoc: { fontSize: 7, color: "#cbd5e1", marginTop: 2, letterSpacing: 0.3 },
@@ -136,7 +135,7 @@ function ConsolidatedDocument({ bills, periodKey, generatedAt }: { bills: any[];
         <View style={styles.headerBand} fixed>
           <View style={styles.logoBox}>
             <View style={styles.logoMark}>
-              <Text style={styles.logoMarkText}>E&C</Text>
+              <EcLogo size={34} />
             </View>
             <View>
               <Text style={styles.companyName}>{COMPANY.name}</Text>
