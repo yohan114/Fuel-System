@@ -178,6 +178,17 @@ async function main() {
     { key: "scraper.cron", value: "0 0 1 * *" },
     { key: "backup.cron", value: "30 2 * * *" },
     { key: "backup.retentionDays", value: "7" },
+    // Monthly billing defaults
+    { key: "billing.enabled", value: "true" },
+    { key: "billing.cron", value: "0 3 1 * *" },
+    { key: "billing.minHours", value: "120" },
+    { key: "billing.minKm", value: "0" },
+    { key: "billing.minDays", value: "26" },
+    { key: "billing.ssclRate", value: "0.025" },
+    { key: "billing.vatRate", value: "0.18" },
+    { key: "billing.dueDays", value: "30" },
+    { key: "billing.invoicePrefix", value: "EC-INV" },
+    { key: "billing.fuelRateFallbackCents", value: "0" },
   ];
   for (const s of settingsDefaults) {
     await prisma.setting.upsert({

@@ -6,7 +6,8 @@
     "dev": "next dev -p 6600",
     "build": "next build",
     "start": "next start -p 6600",
-    "lint": "eslint"
+    "lint": "eslint",
+    "import:rates": "tsx scripts/import_rental_rates.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",
