@@ -93,6 +93,7 @@ async function main() {
 
   const sysUser = await prisma.user.findFirst({ where: { role: "ADMIN" } });
   if (!sysUser) throw new Error("No admin user found — run seed first");
+  const sysUserId = sysUser.id;
 
   // Asset lookup
   const assets = await prisma.asset.findMany({ select: { id: true, code: true, meterType: true, regNo: true } });
@@ -133,7 +134,7 @@ async function main() {
     await prisma.user.upsert({
       where: { username },
       update: { passwordHash: bcrypt.hashSync(password, 10), projectId: p.id, name: `${name} Site User`, active: true },
-      create: { username, name: `${name} Site User`, role: "USER", passwordHash: bcrypt.hashSync(password, 10), projectId: p.id, createdById: sysUser.id },
+      create: { username, name: `${name} Site User`, role: "USER", passwordHash: bcrypt.hashSync(password, 10), projectId: p.id, createdById: sysUserId },
     });
     stats.users++;
     console.log(`Project "${name}" [${code}] — user="${username}" password="${password}"`);
@@ -191,11 +192,11 @@ async function main() {
     for (const r of rows) {
       if (r.working) {
         await prisma.dailyCondition.create({
-          data: { assetId: asset.id, logDate: r.date, status: "WORKING", recordedById: sysUser.id },
+          data: { assetId: asset.id, logDate: r.date, status: "WORKING", recordedById: sysUserId },
         });
         stats.conditions++;
-        if (r.start > 0) readings.push({ assetId: asset.id, readingType: r.meterType, value: r.start, readingDate: r.date, source: "DAILY_SHEET_START", recordedById: sysUser.id });
-        if (r.end > 0 && r.end !== r.start) readings.push({ assetId: asset.id, readingType: r.meterType, value: r.end, readingDate: r.date, source: "DAILY_SHEET_END", recordedById: sysUser.id });
+        if (r.start > 0) readings.push({ assetId: asset.id, readingType: r.meterType, value: r.start, readingDate: r.date, source: "DAILY_SHEET_START", recordedById: sysUserId });
+        if (r.end > 0 && r.end !== r.start) readings.push({ assetId: asset.id, readingType: r.meterType, value: r.end, readingDate: r.date, source: "DAILY_SHEET_END", recordedById: sysUserId });
       }
       if (r.litres > 0) {
         await prisma.fuelIssue.create({
@@ -203,7 +204,7 @@ async function main() {
             assetId: asset.id, fuelKind: "AUTO_DIESEL", litres: r.litres,
             meterReading: r.end > 0 ? r.end : null, readingType: r.end > 0 ? r.meterType : null,
             pricePerLitre, totalCost: Math.round(r.litres * pricePerLitre),
-            issueDate: r.date, source: projectCode, issuedById: sysUser.id, fuelPriceId: price.id,
+            issueDate: r.date, source: projectCode, issuedById: sysUserId, fuelPriceId: price.id,
           },
         });
         stats.issues++; stats.litres += r.litres;

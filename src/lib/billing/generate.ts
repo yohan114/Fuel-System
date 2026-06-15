@@ -300,11 +300,41 @@ export async function generateBillsForMonth(opts: GenerateOptions): Promise<Gene
     assets: [],
   };
 
+  // Only bill the month's AVAILABLE fleet: a vehicle counts as available for the
+  // period if the monthly sheets produced any activity for it — a working-day
+  // condition, a fuel issue, or a meter reading inside the period window. This
+  // mirrors the uploaded sheets, which list each site's available fleet per month.
+  const [condIds, fuelIds, readIds] = await Promise.all([
+    prisma.dailyCondition.findMany({
+      where: { logDate: { gte: period.start, lte: period.end } },
+      select: { assetId: true }, distinct: ["assetId"],
+    }),
+    prisma.fuelIssue.findMany({
+      where: { issueDate: { gte: period.start, lte: period.end } },
+      select: { assetId: true }, distinct: ["assetId"],
+    }),
+    prisma.meterReading.findMany({
+      where: { readingDate: { gte: period.start, lte: period.end } },
+      select: { assetId: true }, distinct: ["assetId"],
+    }),
+  ]);
+  const activeAssetIds = new Set<string>([
+    ...condIds.map((r) => r.assetId),
+    ...fuelIds.map((r) => r.assetId),
+    ...readIds.map((r) => r.assetId),
+  ]);
+
+  // Respect an explicit assetIds filter if given; otherwise restrict to the
+  // available fleet for the month.
+  const idFilter = opts.assetIds
+    ? opts.assetIds.filter((id) => activeAssetIds.has(id))
+    : [...activeAssetIds];
+
   const assets = await prisma.asset.findMany({
     where: {
       status: { not: "DISPOSED" },
       rentalRate: { isNot: null },
-      ...(opts.assetIds ? { id: { in: opts.assetIds } } : {}),
+      id: { in: idFilter },
     },
     select: { id: true, code: true, brand: true, model: true, regNo: true, category: { select: { name: true } } },
     orderBy: { code: "asc" },
