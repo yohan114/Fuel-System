@@ -26,9 +26,10 @@ interface Props {
   unit: string; // "hr" | "km" | "day"
   readingsData: RunningPoint[];
   fuelData: FuelPoint[];
+  derived?: boolean; // running curve was derived from fuel (no meter readings)
 }
 
-export default function BillingRunningChart({ mode, unit, readingsData, fuelData }: Props) {
+export default function BillingRunningChart({ mode, unit, readingsData, fuelData, derived }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -43,8 +44,9 @@ export default function BillingRunningChart({ mode, unit, readingsData, fuelData
     );
   }
 
-  const runningTitle =
+  const baseTitle =
     mode === "perkm" ? "Monthly Running (KM)" : mode === "perday" ? "Daily Hours Logged" : "Monthly Running (Hours)";
+  const runningTitle = derived ? `${baseTitle} — Fuel-Derived` : baseTitle;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -73,9 +75,10 @@ export default function BillingRunningChart({ mode, unit, readingsData, fuelData
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke="#10b981"
+                  stroke={derived ? "#f59e0b" : "#10b981"}
                   strokeWidth={2}
-                  dot={{ r: 2, fill: "#10b981" }}
+                  strokeDasharray={derived ? "5 4" : undefined}
+                  dot={{ r: 2, fill: derived ? "#f59e0b" : "#10b981" }}
                   activeDot={{ r: 4 }}
                 />
               </LineChart>

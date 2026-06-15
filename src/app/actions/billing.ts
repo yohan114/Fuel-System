@@ -429,6 +429,58 @@ export async function markOverdueAction() {
 }
 
 // Update billing.* settings from the admin billing console.
+// Set the per-vehicle fuel consumption rate (L/hr or L/km). When a vehicle has
+// no meter readings for a billing period, the engine derives the billable units
+// from the monthly fuel total ÷ this consumption rate.
+export async function updateFuelConsumptionAction(assetId: string, formData: FormData) {
+  let admin;
+  try {
+    admin = await assertCan("manage");
+  } catch {
+    return { error: "You are not authorized to update vehicle rates" };
+  }
+
+  const asset = await prisma.asset.findUnique({ where: { id: assetId }, select: { code: true, meterType: true } });
+  if (!asset) return { error: "Vehicle not found" };
+
+  const parseRate = (v: FormDataEntryValue | null): number | null => {
+    const s = v?.toString().trim();
+    if (!s) return null;
+    const n = parseFloat(s);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const fuelConsEcon = parseRate(formData.get("fuelConsEcon"));
+  const fuelConsTyp = parseRate(formData.get("fuelConsTyp"));
+  const basisRaw = formData.get("fuelConsBasis")?.toString().trim().toLowerCase();
+  const fuelConsBasis = basisRaw === "km" ? "km" : basisRaw === "hr" ? "hr" : asset.meterType === "KM" ? "km" : "hr";
+
+  try {
+    await prisma.rentalRate.upsert({
+      where: { assetId },
+      update: { fuelConsEcon, fuelConsTyp, fuelConsBasis },
+      create: { assetId, fuelConsEcon, fuelConsTyp, fuelConsBasis },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: "UPDATE",
+        entity: "RentalRate",
+        entityId: assetId,
+        summary: `Set fuel consumption rate for ${asset.code}: econ=${fuelConsEcon ?? "—"}, typ=${fuelConsTyp ?? "—"} L/${fuelConsBasis}`,
+      },
+    });
+
+    revalidatePath(`/fleet/${asset.code}`);
+    revalidatePath("/billing");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Update fuel consumption error:", err);
+    return { error: err.message || "Failed to update fuel consumption rate" };
+  }
+}
+
 export async function updateBillingSettingsAction(formData: FormData) {
   let admin;
   try {

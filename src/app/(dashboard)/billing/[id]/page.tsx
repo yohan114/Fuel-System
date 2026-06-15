@@ -84,6 +84,22 @@ export default async function BillDetailPage(props: PageProps) {
     litres: f.litres,
   }));
 
+  // Fuel-derived fallback: when there are no meter readings but units were
+  // derived from fuel, synthesise a cumulative "running" curve from the fuel
+  // fills (each fill adds litres ÷ mid consumption rate to the running total).
+  let derivedRunning = false;
+  if (readingsData.length === 0 && bill.derivedFromFuel && bill.fuelConsMidRate && bill.fuelConsMidRate > 0) {
+    let cumulative = 0;
+    readingsData = fuelIssues.map((f) => {
+      cumulative += f.litres / bill.fuelConsMidRate!;
+      return {
+        date: new Date(f.issueDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+        value: Math.round(cumulative * 10) / 10,
+      };
+    });
+    derivedRunning = readingsData.length > 0;
+  }
+
   // Breakdown history for the billing period
   const breakdownConditions = bill.breakdownDays > 0
     ? await prisma.dailyCondition.findMany({
@@ -157,7 +173,7 @@ export default async function BillDetailPage(props: PageProps) {
       </div>
 
       {/* Running + fuel charts */}
-      <BillingRunningChart mode={bill.billingMode} unit={unit} readingsData={readingsData} fuelData={fuelData} />
+      <BillingRunningChart mode={bill.billingMode} unit={unit} readingsData={readingsData} fuelData={fuelData} derived={derivedRunning} />
 
       {/* Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
