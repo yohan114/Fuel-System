@@ -9,22 +9,27 @@ const GRAY = "#64748b";
 const GRAY_LIGHT = "#e2e8f0";
 
 export const COMPANY = {
-  name: "Edward & Christie (Pvt) Ltd",
+  name: "Edward and Christie Group",
   division: "Heavy Equipment & Fleet Division",
   address: "No. 123, Bauddhaloka Mawatha, Colombo 04, Sri Lanka",
   phone: "+94 11 234 5678",
   email: "fleet@edwardchristie.lk",
-  vatReg: "VAT Reg: 114-236-8891",
+  vatReg: "VAT Reg No: 174042756-7000",
+  docNumber: "EC40.WS.IV.8.12.25.3",
 };
 
 const styles = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 9, color: "#1e293b", backgroundColor: WHITE },
 
   headerBand: { backgroundColor: NAVY, padding: "20 32 16 32", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  logoBox: { flexDirection: "row", alignItems: "center", gap: 10 },
+  logoMark: { backgroundColor: AMBER, borderRadius: 4, padding: "6 10", alignItems: "center", justifyContent: "center" },
+  logoMarkText: { fontSize: 16, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1 },
   companyName: { fontSize: 15, fontFamily: "Helvetica-Bold", color: WHITE, letterSpacing: 0.5 },
   companyDiv: { fontSize: 8, color: "#93c5fd", marginTop: 3 },
-  invoiceLabel: { fontSize: 18, fontFamily: "Helvetica-Bold", color: AMBER, textAlign: "right" },
-  invoiceNum: { fontSize: 10, fontFamily: "Helvetica-Bold", color: WHITE, textAlign: "right", marginTop: 3 },
+  companyDoc: { fontSize: 7, color: "#cbd5e1", marginTop: 2, letterSpacing: 0.3 },
+  invoiceLabel: { fontSize: 20, fontFamily: "Helvetica-Bold", color: AMBER, textAlign: "right", letterSpacing: 1 },
+  invoiceNum: { fontSize: 10, fontFamily: "Helvetica-Bold", color: WHITE, textAlign: "right", marginTop: 4 },
   statusBadge: { fontSize: 7, color: "#93c5fd", textAlign: "right", marginTop: 2, textTransform: "uppercase" },
 
   accentStrip: { backgroundColor: AMBER, height: 3 },
@@ -94,9 +99,15 @@ export function InvoiceDocument({ bill }: { bill: any }) {
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerBand}>
-          <View>
-            <Text style={styles.companyName}>{COMPANY.name}</Text>
-            <Text style={styles.companyDiv}>{COMPANY.division}</Text>
+          <View style={styles.logoBox}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoMarkText}>E&C</Text>
+            </View>
+            <View>
+              <Text style={styles.companyName}>{COMPANY.name}</Text>
+              <Text style={styles.companyDiv}>{COMPANY.division}</Text>
+              <Text style={styles.companyDoc}>Doc No: {COMPANY.docNumber}</Text>
+            </View>
           </View>
           <View>
             <Text style={styles.invoiceLabel}>TAX INVOICE</Text>
