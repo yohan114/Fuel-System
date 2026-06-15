@@ -20,6 +20,15 @@ export interface GenerateOptions {
   actorId?: string | null;
 }
 
+export interface AssetOutcome {
+  assetId: string;
+  assetCode: string;
+  assetLabel?: string;
+  status: GenerateStatus | "error";
+  message?: string;
+  billId?: string;
+}
+
 export interface GenerateResult {
   periodKey: string;
   created: number;
@@ -28,6 +37,7 @@ export interface GenerateResult {
   skippedExisting: number;
   noRate: number;
   errors: { assetId: string; assetCode?: string; message: string }[];
+  assets: AssetOutcome[];
 }
 
 // Generates (or regenerates a DRAFT) bill for one asset for the given period.
@@ -257,6 +267,7 @@ export async function generateBillsForMonth(opts: GenerateOptions): Promise<Gene
     skippedExisting: 0,
     noRate: 0,
     errors: [],
+    assets: [],
   };
 
   const assets = await prisma.asset.findMany({
@@ -265,11 +276,12 @@ export async function generateBillsForMonth(opts: GenerateOptions): Promise<Gene
       rentalRate: { isNot: null },
       ...(opts.assetIds ? { id: { in: opts.assetIds } } : {}),
     },
-    select: { id: true, code: true },
+    select: { id: true, code: true, brand: true, model: true, regNo: true, category: { select: { name: true } } },
     orderBy: { code: "asc" },
   });
 
   for (const a of assets) {
+    const assetLabel = [a.brand, a.model].filter(Boolean).join(" ").trim() || a.category.name;
     try {
       const r = await generateBillForAsset(a.id, period, {
         regenerate: opts.regenerate ?? false,
@@ -280,8 +292,10 @@ export async function generateBillsForMonth(opts: GenerateOptions): Promise<Gene
       else if (r.status === "skipped-finalized") result.skippedFinalized++;
       else if (r.status === "skipped-existing") result.skippedExisting++;
       else if (r.status === "no-rate") result.noRate++;
+      result.assets.push({ assetId: a.id, assetCode: a.code, assetLabel, status: r.status, billId: r.billId });
     } catch (err: any) {
       result.errors.push({ assetId: a.id, assetCode: a.code, message: err?.message || "error" });
+      result.assets.push({ assetId: a.id, assetCode: a.code, assetLabel, status: "error", message: err?.message || "error" });
     }
   }
 

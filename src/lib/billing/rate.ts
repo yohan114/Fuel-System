@@ -25,6 +25,11 @@ export function pickRateCents(
   return basis === "fw" ? rate.dyFwCents : basis === "w" ? rate.dyWCents : rate.dyDCents;
 }
 
+// Convenience: always pick the wet rate for a given mode (for display purposes).
+export function getWetRateCents(rate: RentalRate, mode: BillingMode): number | null {
+  return pickRateCents(rate, mode, "w");
+}
+
 // Default billing mode for an asset: portables are day-hire; HOURS-metered
 // machines bill hourly; KM-metered vehicles bill per-km.
 export function defaultModeForAsset(

@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { currentMonthPeriod } from "@/lib/billing/period";
 import { Receipt, Wallet, FileText, AlertTriangle } from "lucide-react";
 import GenerateBillsPanel from "./components/GenerateBillsPanel";
+import ConsolidatedBillPanel from "./components/ConsolidatedBillPanel";
 
 interface PageProps {
   searchParams: Promise<{ month?: string; site?: string; status?: string }>;
@@ -147,6 +148,7 @@ export default async function BillingPage(props: PageProps) {
 
       {/* Admin generate panel */}
       {isAdmin && <GenerateBillsPanel defaultYear={y || cur.year} defaultMonth={m || cur.month} />}
+      {isAdmin && <ConsolidatedBillPanel defaultYear={y || cur.year} defaultMonth={m || cur.month} />}
 
       {/* Bills table */}
       {bills.length === 0 ? (

@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, FileSpreadsheet, Building2, Calendar } from "lucide-react";
 import { unitLabel, basisLabel, modeLabel, type BillingMode, type RateBasis } from "@/lib/billing/calc";
+import { getWetRateCents } from "@/lib/billing/rate";
 import BillActions from "./BillActions";
 import BillingRunningChart from "../components/BillingRunningChart";
 
@@ -38,6 +39,15 @@ export default async function BillDetailPage(props: PageProps) {
     include: { lineItems: true },
   });
   if (!bill) notFound();
+
+  // Fetch wet rate for display (even when billing basis is fw or d)
+  const assetWithRate = await prisma.asset.findUnique({
+    where: { id: bill.assetId },
+    include: { rentalRate: true },
+  });
+  const wetRateCents = assetWithRate?.rentalRate
+    ? getWetRateCents(assetWithRate.rentalRate, bill.billingMode as BillingMode)
+    : null;
 
   // USER scope: only their own project's bills.
   if (session.role === "USER" && session.projectId && bill.projectId !== session.projectId) {
@@ -167,7 +177,10 @@ export default async function BillDetailPage(props: PageProps) {
             {bill.breakdownDays > 0 && (
               <Row label="Breakdown days" value={`${bill.breakdownDays} day${bill.breakdownDays !== 1 ? "s" : ""}`} />
             )}
-            <Row label={`Rate (per ${unit})`} value={rs(bill.rateCents)} />
+            {wetRateCents != null && bill.rateBasis !== "w" && (
+              <Row label={`Wet rate (per ${unit})`} value={rs(wetRateCents)} />
+            )}
+            <Row label={`${bill.rateBasis === "w" ? "Wet" : bill.rateBasis === "fw" ? "Fully Wet" : "Dry"} rate (per ${unit})`} value={rs(bill.rateCents)} strong />
             <div className="border-t border-white/5 my-2" />
             <Row label="Rental amount" value={rs(bill.rentalAmountCents)} strong />
             {bill.breakdownDeductCents > 0 && (
