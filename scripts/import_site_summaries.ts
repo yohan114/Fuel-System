@@ -46,10 +46,17 @@ const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL || "file
 const prisma = new PrismaClient({ adapter });
 
 const UPLOADS = "/root/.claude/uploads/0e793a13-eb4c-5561-a4fd-d386f6b9819e";
-const SITES = [
-  { code: "GB",   name: "Gampaha Bridge",  file: "05d37c9a-machines_Vehicles_at_Gampaha_Bridge__2.xlsb" },
-  { code: "INGI", name: "Inginimitiya",    file: "5c29a0f0-Inginimitiya_Vehicle_Machinery_summary.xlsx" },
-  { code: "KB",   name: "Karativu Bridge", file: "4ded3264-machines_cost_Karativu_Bridge__1.xlsb" },
+const SITES: { code: string; name: string; files: string[] }[] = [
+  { code: "GB",   name: "Gampaha Bridge",  files: ["05d37c9a-machines_Vehicles_at_Gampaha_Bridge__2.xlsb"] },
+  { code: "INGI", name: "Inginimitiya",    files: ["5c29a0f0-Inginimitiya_Vehicle_Machinery_summary.xlsx"] },
+  { code: "KB",   name: "Karativu Bridge", files: ["4ded3264-machines_cost_Karativu_Bridge__1.xlsb"] },
+  { code: "BATTI", name: "ICDP Batti Lot-03", files: [
+    "dd9fd7f5-Batti_ICDP_LOT03_January.xlsx",
+    "71a0583e-Batti_ICDP_LOT03_September_2025.xlsx",
+    "7cd63ca6-Batti_ICDP_LOT03_October_2025.xlsx",
+    "b7247401-Batti_ICDP_LOT03_November_2025.xlsx",
+    "165a019a-Batti_ICDP_LOT03_December_2025.xlsx",
+  ] },
 ];
 
 const toFloat = (v: unknown) => { const n = parseFloat(String(v)); return isNaN(n) ? 0 : n; };
@@ -64,6 +71,15 @@ function parseSheetMonth(name: string) {
   const p = name.trim().toLowerCase().split(/\s+/);
   const month = MONTHS[p[0]]; const year = parseInt(p[1]);
   return month && !isNaN(year) ? { year, month } : null;
+}
+// Some workbooks have the wrong month/year typed in the tab + title (copy-paste
+// leftovers). When the file is named per-month, the filename is authoritative.
+function parseFileMonth(filename: string): { month?: number; year?: number } {
+  const lower = filename.toLowerCase();
+  let month: number | undefined;
+  for (const [name, num] of Object.entries(MONTHS)) if (lower.includes(name)) { month = num; break; }
+  const ym = filename.match(/(20\d{2})/);
+  return { month, year: ym ? parseInt(ym[1]) : undefined };
 }
 
 // Map a free-text vehicle type to one of the rebuilt category codes.
@@ -96,10 +112,13 @@ function mapTypeToCategory(type: string): string {
 function detectColumns(header: unknown[]) {
   const find = (pred: (s: string) => boolean) =>
     header.findIndex((c) => typeof c === "string" && pred(c.toLowerCase()));
+  // Prefer the ACTUAL usage column; fall back to any days/machine-hours column.
+  let units = find((s) => s.includes("actual") && (s.includes("working") || s.includes("days") || s.includes("hours")));
+  if (units < 0) units = find((s) => s.includes("machine hours") || s.includes("days/machine"));
   return {
     veh: find((s) => s.includes("vehicle no")) >= 0 ? find((s) => s.includes("vehicle no")) : 1,
     type: find((s) => s === "type") >= 0 ? find((s) => s === "type") : 2,
-    units: find((s) => s.includes("actual") && (s.includes("working") || s.includes("days") || s.includes("hours"))),
+    units,
     fuel: find((s) => s.trim() === "fuel"),
   };
 }
@@ -149,8 +168,8 @@ async function main() {
   }
 
   for (const site of SITES) {
-    const fp = path.join(UPLOADS, site.file);
-    if (!fs.existsSync(fp)) { console.warn(`  ⚠ missing ${site.file}`); continue; }
+    const present = site.files.filter((f) => fs.existsSync(path.join(UPLOADS, f)));
+    if (present.length === 0) { console.warn(`  ⚠ no files for ${site.name}`); continue; }
 
     const project = await prisma.project.upsert({ where: { code: site.code }, update: { name: site.name }, create: { name: site.name, code: site.code } });
     stats.projects++;
@@ -164,20 +183,28 @@ async function main() {
     stats.users++;
     console.log(`\n── ${site.name} [${site.code}] — user="${username}" password="${password}"`);
 
-    const wb = XLSX.readFile(fp, { cellDates: false });
-    // chronological order for cumulative hour readings
-    const sheets = wb.SheetNames
-      .map((sn) => ({ sn, period: parseSheetMonth(sn) }))
-      .filter((x) => x.period)
-      .sort((a, b) => (a.period!.year - b.period!.year) || (a.period!.month - b.period!.month));
+    // Gather every monthly sheet across all of the site's workbooks, sorted
+    // chronologically so cumulative hour readings line up.
+    const sheets: { rows: unknown[][]; period: { year: number; month: number } }[] = [];
+    for (const f of present) {
+      const wb = XLSX.readFile(path.join(UPLOADS, f), { cellDates: false });
+      const fm = parseFileMonth(f); // filename month/year overrides a mislabeled tab
+      for (const sn of wb.SheetNames) {
+        const sheetP = parseSheetMonth(sn);
+        const month = fm.month ?? sheetP?.month;
+        const year = fm.year ?? sheetP?.year;
+        if (!month || !year) continue;
+        sheets.push({ rows: XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[sn], { header: 1, defval: "" }), period: { year, month } });
+      }
+    }
+    sheets.sort((a, b) => (a.period.year - b.period.year) || (a.period.month - b.period.month));
 
     const cumHours = new Map<string, number>(); // assetId → cumulative machine-hours
     const touched = new Set<string>();
 
-    for (const { sn, period } of sheets) {
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[sn], { header: 1, defval: "" });
+    for (const { rows, period } of sheets) {
       const cols = detectColumns(rows[2] || []);
-      const { year, month } = period!;
+      const { year, month } = period;
 
       for (const row of rows.slice(3)) {
         const r = row as unknown[];
@@ -219,7 +246,7 @@ async function main() {
           stats.readings += 2;
         }
       }
-      console.log(`   ✓ ${sn.trim()}`);
+      console.log(`   ✓ ${year}-${String(month).padStart(2, "0")}`);
     }
   }
 
